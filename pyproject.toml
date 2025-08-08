@@ -1,0 +1,32 @@
+[project]
+name = "promptmetrics"
+version = "0.1.0"
+description = "A modular toolkit for the rigorous evaluation and metric generation of LLM prompts."
+dependencies = [
+    "datasets",
+    "openai",
+    "python-dotenv",
+    "tqdm",
+    "Pillow",
+    "pydantic",
+]
+readme = "README.md"
+requires-python = ">= 3.11"
+
+# Defines clean command-line entry points
+[project.scripts]
+pm-generate = "promptmetrics.scripts.run_generation:main"
+pm-judge = "promptmetrics.scripts.run_judging:main"
+
+# Defines dependencies only needed for development and testing
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "pytest-mock",
+    "ruff",
+    "mypy",
+]
+
+[tool.uv]
+package = true
