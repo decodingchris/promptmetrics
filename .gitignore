@@ -205,8 +205,11 @@ __marimo__/
 # PromptMetrics
 results/
 
-# Ignore all content within the private prompts directory...
-prompts/private/*
+# Ignore everything in prompts/private
+prompts/private/**
 
-# ...but DO NOT ignore .gitkeep files, so the directory structure is tracked.
+# But keep traversing subdirectories so we can selectively unignore files
+!prompts/private/**/
+
+# Allow only .gitkeep files to be tracked
 !prompts/private/**/.gitkeep
