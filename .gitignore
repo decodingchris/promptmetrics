@@ -204,6 +204,7 @@ __marimo__/
 
 # PromptMetrics
 results/
+logs/
 
 # Ignore everything in prompts/private
 prompts/private/**

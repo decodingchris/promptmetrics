@@ -10,6 +10,7 @@ from typing import Tuple
 
 from promptmetrics.benchmarks.hle import HLEBenchmark
 from promptmetrics.llm_providers.openrouter import OpenRouterLLM
+from promptmetrics.logging_utils import setup_logger
 
 class JudgeVerdict(BaseModel):
     is_correct: bool
@@ -57,6 +58,12 @@ async def main_async():
     predictions = data['predictions']
 
     benchmark = get_benchmark_instance(generation_metadata['benchmark'])
+    timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    
+    log_base_str = str(args.input_file.parent.parent).replace('results', 'logs', 1)
+    log_dir = Path(log_base_str) / 'judging'
+    setup_logger(log_dir, f"{timestamp}_judging.log")
+
     judge_llm = OpenRouterLLM(model_name=args.judge_model)
     judge_prompt_template, judge_prompt_path, judge_prompt_type = load_judge_prompt_template(args.judge_prompt_source, benchmark.name)
     questions_map = {q['id']: q for q in benchmark.load_data()}
@@ -64,7 +71,6 @@ async def main_async():
     judged_dir = args.input_file.parent.parent / "judged"
     judged_dir.mkdir(parents=True, exist_ok=True)
     
-    timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     sanitized_judge_model = args.judge_model.replace("/", "_").replace(":", "-")
     judge_prompt_name = Path(args.judge_prompt_source).stem
     judged_filename = f"{timestamp}_judged_by_{sanitized_judge_model}_with_{judge_prompt_name}.json"

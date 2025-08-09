@@ -9,6 +9,7 @@ from typing import Tuple
 
 from promptmetrics.benchmarks.hle import HLEBenchmark
 from promptmetrics.llm_providers.openrouter import OpenRouterLLM
+from promptmetrics.logging_utils import setup_logger
 
 def get_benchmark_instance(name: str):
     if name.lower() == "hle":
@@ -46,7 +47,6 @@ async def main_async():
     args = parser.parse_args()
 
     benchmark = get_benchmark_instance(args.benchmark)
-    llm = OpenRouterLLM(model_name=args.model)
     prompt_template, resolved_prompt_path, source_type = load_prompt_template(args.prompt_source, benchmark.name)
 
     prompt_name = Path(args.prompt_source).stem
@@ -58,10 +58,15 @@ async def main_async():
         experiment_name = prompt_name
 
     sanitized_model_name = args.model.replace("/", "_").replace(":", "-")
+    timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+    log_dir = Path(f"logs/{benchmark.name}/{sanitized_model_name}/{experiment_name}/generation")
+    setup_logger(log_dir, f"{timestamp}_generation.log")
+
+    llm = OpenRouterLLM(model_name=args.model)
+    
     output_dir = Path(f"results/{benchmark.name}/{sanitized_model_name}/{experiment_name}/predictions")
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     predictions_filepath = output_dir / f"{timestamp}_predictions.json"
 
     questions = benchmark.load_data(max_samples=args.max_samples)
