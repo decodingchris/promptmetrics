@@ -93,7 +93,7 @@ async def main_async():
             verdict = await judge_llm.generate_structured(judge_prompt, response_model=JudgeVerdict)
             return q_id, {
                 "judgement": verdict,
-                "response": pred_data['response'],
+                "prediction_data": pred_data,
                 "correct_answer": question_data['answer']
             }
 

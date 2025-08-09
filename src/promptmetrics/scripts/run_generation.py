@@ -77,15 +77,19 @@ async def main_async():
     async def generate_item(question):
         async with semaphore:
             final_prompt = benchmark.format_prompt(question, prompt_template)
-            response_text = await llm.generate(final_prompt, temperature=args.temperature, max_tokens=args.max_tokens)
-            return question['id'], {"response": response_text}
+            response_data = await llm.generate(final_prompt, temperature=args.temperature, max_tokens=args.max_tokens)
+            prediction = {
+                "response": response_data.get("content"),
+                "reasoning": response_data.get("reasoning"),
+            }
+            return question['id'], prediction
 
     tasks = [generate_item(question) for question in questions]
     print(f"Generating {len(tasks)} responses with {args.num_workers} concurrent workers...")
     results = await tqdm_asyncio.gather(*tasks)
-    for q_id, response_data in results:
+    for q_id, prediction_data in results:
         if q_id:
-            predictions[q_id] = response_data
+            predictions[q_id] = prediction_data
 
     output_data = {
         "metadata": {
