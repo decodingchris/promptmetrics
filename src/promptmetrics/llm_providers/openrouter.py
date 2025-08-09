@@ -3,11 +3,14 @@ import logging
 import json
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
-from pydantic import BaseModel, ValidationError
-from typing import Type
+from pydantic import BaseModel
+from typing import Type, Union
 
 load_dotenv()
 logger = logging.getLogger("promptmetrics.llm_providers.openrouter")
+
+T = Type[BaseModel]
+StructuredResponse = Union[BaseModel, dict]
 
 class OpenRouterLLM:
     """An asynchronous client for all OpenRouter API interactions."""
@@ -62,7 +65,7 @@ class OpenRouterLLM:
             print(f"\n--- API Error (generate) for model {self.model_name}: {e} ---")
             return {"content": f"API_ERROR: {e}", "reasoning": None}
 
-    async def generate_structured(self, prompt: str, response_model: Type[BaseModel]) -> dict:
+    async def generate_structured(self, prompt: str, response_model: T) -> StructuredResponse:
         log_payload = {
             "model": self.model_name,
             "prompt": prompt,
@@ -70,36 +73,49 @@ class OpenRouterLLM:
         }
         logger.info(json.dumps({"event": "generate_structured_request", "payload": log_payload}))
         
-        raw_content = "Response object not created"
         try:
-            response = await self.client.chat.completions.create(
+            completion = await self.client.chat.completions.parse(
                 model=self.model_name,
                 messages=[{"role": "user", "content": prompt}],
-                response_format={"type": "json_object"},
+                response_format=response_model,
                 temperature=0.0,
                 extra_headers=self.headers,
                 max_tokens=1024,
             )
-            raw_content = response.choices[0].message.content
-            parsed_response = response_model.model_validate_json(raw_content)
-            response_dict = parsed_response.model_dump()
-            logger.info(json.dumps({"event": "generate_structured_success", "response": response_dict}))
-            return response_dict
-        except (ValidationError, json.JSONDecodeError) as e:
-            error_details = {
-                "event": "generate_structured_error",
-                "error": str(e),
-                "raw_model_response": raw_content,
-            }
-            logger.error(json.dumps(error_details))
-            print(f"\n--- Judge API Error (generate_structured) for model {self.model_name}: {e} ---")
-            return {"is_correct": None, "reasoning": f"Judge API call failed: {e}", "extracted_answer": None}
+
+            message = completion.choices[0].message
+
+            if message.refusal:
+                reason = f"Model refused to respond: {message.refusal}"
+                logger.warning(json.dumps({"event": "generate_structured_refusal", "reason": reason}))
+                return {"is_correct": None, "reasoning": reason, "extracted_answer": None}
+
+            parsed_response = message.parsed
+            if not parsed_response:
+                unparsed_content = message.content or ""
+                reason = (
+                    f"Failed to parse model response. This usually means the judge model ('{self.model_name}') "
+                    "does not support structured outputs or returned malformed JSON. "
+                    f"Raw response: '{unparsed_content[:100]}...'"
+                )
+                logger.error(json.dumps({"event": "generate_structured_parsing_failed", "reason": reason}))
+                return {"is_correct": None, "reasoning": reason, "extracted_answer": None}
+
+            logger.info(json.dumps({"event": "generate_structured_success", "response": parsed_response.model_dump()}))
+            return parsed_response
+        
         except Exception as e:
             error_details = {
                 "event": "generate_structured_error",
                 "error": str(e),
-                "raw_model_response": "N/A - API call failed before response",
+                "error_type": type(e).__name__,
             }
             logger.error(json.dumps(error_details))
-            print(f"\n--- Judge API Error (generate_structured) for model {self.model_name}: {e} ---")
-            return {"is_correct": None, "reasoning": f"Judge API call failed: {e}", "extracted_answer": None}
+
+            helpful_reason = (
+                f"Judge API call failed with a '{type(e).__name__}'. This can happen if the judge model "
+                f"('{self.model_name}') does not support structured outputs. Try a different --judge_model, "
+                f"like 'mistralai/mistral-small-3.2-24b-instruct'. Original error: {e}"
+            )
+            print(f"\n--- Judge API Error (generate_structured) for model {self.model_name}: {helpful_reason} ---")
+            return {"is_correct": None, "reasoning": helpful_reason, "extracted_answer": None}

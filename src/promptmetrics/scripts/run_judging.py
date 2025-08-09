@@ -6,14 +6,14 @@ import datetime
 from pathlib import Path
 from tqdm.asyncio import tqdm_asyncio
 from pydantic import BaseModel
-from typing import Tuple
+from typing import Tuple, Dict, Any
 
 from promptmetrics.benchmarks.hle import HLEBenchmark
 from promptmetrics.llm_providers.openrouter import OpenRouterLLM
 from promptmetrics.logging_utils import setup_logger
 
 class JudgeVerdict(BaseModel):
-    is_correct: bool
+    is_correct: bool | None
     extracted_answer: str | None
     reasoning: str
 
@@ -76,7 +76,7 @@ async def main_async():
     judged_filename = f"{timestamp}_judged_by_{sanitized_judge_model}_with_{judge_prompt_name}.json"
     judged_filepath = judged_dir / judged_filename
     
-    verdicts = {}
+    verdicts: Dict[str, Any] = {}
     items_to_judge = predictions
 
     semaphore = asyncio.Semaphore(args.num_workers)
@@ -90,9 +90,12 @@ async def main_async():
                 correct_answer=question_data['answer'],
                 model_response=pred_data['response']
             )
-            verdict = await judge_llm.generate_structured(judge_prompt, response_model=JudgeVerdict)
+            verdict_obj = await judge_llm.generate_structured(judge_prompt, response_model=JudgeVerdict)
+            
+            judgement_dict = verdict_obj if isinstance(verdict_obj, dict) else verdict_obj.model_dump()
+
             return q_id, {
-                "judgement": verdict,
+                "judgement": judgement_dict,
                 "prediction_data": pred_data,
                 "correct_answer": question_data['answer']
             }
