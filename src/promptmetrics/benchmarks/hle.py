@@ -1,5 +1,5 @@
 import os
-from datasets import load_dataset
+from datasets import load_dataset, get_dataset_infos
 from typing import Dict, Any, List
 from .base import BaseBenchmark, MessageContentType
 from dotenv import load_dotenv
@@ -18,6 +18,15 @@ class HLEBenchmark(BaseBenchmark):
     @property
     def is_multimodal(self) -> bool:
         return True
+    
+    def get_size(self) -> int:
+        """Efficiently gets the total number of samples in the dataset split."""
+        hf_token = os.getenv("HF_TOKEN")
+        try:
+            infos = get_dataset_infos(self.dataset_name, token=hf_token)
+            return infos[self.dataset_config].splits[self.dataset_split].num_examples
+        except Exception:
+            return len(self.load_data())
 
     def load_data(self, max_samples: int | None = None) -> List[Dict[str, Any]]:
         hf_token = os.getenv("HF_TOKEN")

@@ -71,6 +71,11 @@ async def main_async():
     parser.add_argument("--evaluator_model", default="mistralai/mistral-small-3.2-24b-instruct:free", help="LLM to use as the evaluator.")
     parser.add_argument("--evaluation_prompt_source", required=True, help="Name of a built-in evaluation prompt or path to a custom one.")
     parser.add_argument("--num_workers", type=int, default=10, help="Number of concurrent evaluation requests.")
+    parser.add_argument(
+        "--allow-full-run",
+        action="store_true",
+        help="Bypass the confirmation prompt when evaluating a large number of generations."
+    )
     args = parser.parse_args()
 
     if not args.input_file.exists():
@@ -82,6 +87,17 @@ async def main_async():
     generation_metadata = data['metadata']['generation']
     generations = data['generations']
     was_mismatched = generation_metadata.get("is_mismatched_run", False)
+
+    if not args.allow_full_run:
+        num_to_evaluate = len(generations)
+        print(f"\n--- ⚠️  Warning: Full Evaluation Run ---")
+        print(f"This will evaluate all {num_to_evaluate} generated responses from the input file.")
+        print(f"\nThis will result in approximately {num_to_evaluate} API calls to the evaluator model '{args.evaluator_model}'.")
+        print(f"This may lead to significant API costs and could take a long time to complete.")
+        confirm = input("\nAre you sure you want to continue? (y/N): ").lower().strip()
+        if confirm not in ['y', 'yes']:
+            print("Operation cancelled by user.")
+            return
 
     benchmark = get_benchmark_instance(generation_metadata['benchmark'])
     timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")

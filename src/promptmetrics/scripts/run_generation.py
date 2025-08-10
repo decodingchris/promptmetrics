@@ -61,21 +61,36 @@ async def main_async():
     parser.add_argument("--max_tokens", type=int, default=8192, help="Maximum number of completion tokens for the model.")
     parser.add_argument("--max_samples", type=int, default=None, help="Maximum number of samples to evaluate.")
     parser.add_argument("--num_workers", type=int, default=10, help="Number of concurrent generation requests.")
+    parser.add_argument(
+        "--allow-full-run",
+        action="store_true",
+        help="Bypass the confirmation prompt when running on a full benchmark without --max_samples."
+    )
     args = parser.parse_args()
 
     benchmark = get_benchmark_instance(args.benchmark)
+
+    if not args.allow_full_run and args.max_samples is None:
+        total_samples = benchmark.get_size()
+        print(f"\n--- ⚠️  Warning: Full Benchmark Run ---")
+        print(f"You have not specified --max_samples. This will run generation on the entire '{args.benchmark}' benchmark.")
+        print(f"\nThis will result in approximately {total_samples} API calls to the model '{args.model}'.")
+        print(f"This may lead to significant API costs and could take a long time to complete.")
+        confirm = input("\nAre you sure you want to continue? (y/N): ").lower().strip()
+        if confirm not in ['y', 'yes']:
+            print("Operation cancelled by user.")
+            return
+
     llm = OpenRouterLLM(model_name=args.model)
 
     is_mismatched_run = False 
     
     if benchmark.is_multimodal and not llm.supports_vision:
         is_mismatched_run = True
-        print("\n--- ⚠️  Warning: Modality Mismatch ---\n"
-              f"Benchmark '{args.benchmark}' is multi-modal (contains images).\n"
-              f"Model '{args.model}' does not support image input.\n\n"
-              "Images will be omitted from the prompts. This may significantly affect the model's performance "
-              "and the validity of the benchmark score.\n")
-        
+        print("\n--- ⚠️  Warning: Modality Mismatch ---")
+        print(f"Benchmark '{args.benchmark}' is multi-modal (contains images).")
+        print(f"Model '{args.model}' does not support image input.")
+        print("Images will be omitted from the prompts. This may significantly affect the model's performance.")
         confirm = input("Do you want to continue with this text-only evaluation? (y/N): ").lower().strip()
         if confirm not in ['y', 'yes']:
             print("Evaluation cancelled.")
