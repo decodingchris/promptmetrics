@@ -1,4 +1,5 @@
 import os
+import logging
 from datasets import load_dataset, get_dataset_infos
 from huggingface_hub.errors import HfHubHTTPError
 from typing import Dict, Any, List, Type, Literal
@@ -7,6 +8,7 @@ from .base import BaseBenchmark, MessageContentType
 from dotenv import load_dotenv
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 
 class OfficialHLEEvaluation(BaseModel):
@@ -58,14 +60,12 @@ class HLEBenchmark(BaseBenchmark):
             infos = get_dataset_infos(self.dataset_name, token=hf_token)
             return infos[self.dataset_config].splits[self.dataset_split].num_examples
         except (HfHubHTTPError, KeyError) as e:
-            print("\n--- ⚠️  Warning: Slow Dataset Size Calculation ---")
-            print(
-                f"Could not quickly fetch dataset size due to a '{type(e).__name__}' error. "
-                "This is expected if you are offline or the dataset requires authentication."
-            )
-            print(
+            logger.warning(
+                "Could not quickly fetch dataset size due to a '%s' error. "
+                "This is expected if you are offline or the dataset requires authentication. "
                 "Falling back to a full data load to determine the size. "
-                "This will be slower and may consume significant memory and network bandwidth."
+                "This will be slower and may consume significant memory and network bandwidth.",
+                type(e).__name__,
             )
             return len(self.load_data())
 
@@ -76,7 +76,7 @@ class HLEBenchmark(BaseBenchmark):
     ) -> List[Dict[str, Any]]:
         hf_token = os.getenv("HF_TOKEN")
         if not hf_token:
-            print("Warning: HF_TOKEN not set. This may fail for gated datasets.")
+            logger.warning("HF_TOKEN not set. This may fail for gated datasets.")
 
         dataset = load_dataset(
             self.dataset_name,
@@ -86,8 +86,9 @@ class HLEBenchmark(BaseBenchmark):
         )
 
         if ids_to_load:
-            print(
-                f"Optimized load: Loading {len(ids_to_load)} specific samples from the benchmark."
+            logger.info(
+                "Optimized load: Loading %d specific samples from the benchmark.",
+                len(ids_to_load),
             )
             id_to_index = {id_val: i for i, id_val in enumerate(dataset["id"])}
             indices_to_load = [

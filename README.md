@@ -82,7 +82,7 @@ This step takes the generated artifact and uses a powerful "evaluator" LLM to gr
 ```bash
 # Paste the full path from the previous command as the --input_file
 uv run pm-evaluate \
-  --input_file "results/hle/openai_gpt-4o/public-official_generation_v1/generations/20250810..._generations.json" \
+  --input_file "results/hle/openai_gpt-4o/public-official_generation_v1/generations/<TIMESTAMP>_generations.json" \
   --evaluator_model "openai/gpt-4o" \
   --evaluation_prompt_source "official_evaluation_v1"
 ```
