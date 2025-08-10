@@ -1,5 +1,6 @@
 import os
 from datasets import load_dataset, get_dataset_infos
+from huggingface_hub.errors import HfHubHTTPError
 from typing import Dict, Any, List, Type, Literal
 from pydantic import BaseModel, Field
 from .base import BaseBenchmark, MessageContentType
@@ -52,8 +53,11 @@ class HLEBenchmark(BaseBenchmark):
         try:
             infos = get_dataset_infos(self.dataset_name, token=hf_token)
             return infos[self.dataset_config].splits[self.dataset_split].num_examples
-        except Exception:
-            # Fallback for offline or other errors
+        except (HfHubHTTPError, KeyError) as e:
+            print(
+                f"Warning: Could not quickly get dataset size due to an error ('{type(e).__name__}'). "
+                "Falling back to slower full data load. This is expected if offline."
+            )
             return len(self.load_data())
 
     def load_data(
@@ -81,8 +85,10 @@ class HLEBenchmark(BaseBenchmark):
                 id_to_index[id_val] for id_val in ids_to_load if id_val in id_to_index
             ]
             dataset = dataset.select(indices_to_load)
+
         elif max_samples:
             dataset = dataset.select(range(max_samples))
+
         return [sample for sample in dataset]
 
     def format_prompt_messages(
