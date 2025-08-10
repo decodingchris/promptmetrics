@@ -4,10 +4,11 @@ A modular toolkit for the rigorous evaluation and metric generation of LLM promp
 
 ---
 
-`PromptMetrics` is a professional-grade Python toolkit for the rigorous evaluation of Large Language Model (LLM) prompts. It provides a flexible, reproducible, and cost-effective framework for measuring prompt performance against academic benchmarks like [Humanity's Last Exam (HLE)](https://huggingface.co/datasets/cais/hle).
+`PromptMetrics` is a professional-grade Python toolkit for the rigorous evaluation of Large Language Model (LLM) prompts. It provides a flexible, reproducible, and cost-effective framework for measuring prompt performance against academic benchmarks like [Humanity's Last Exam (HLE)](https://huggingface.co/datasets/cais/hle), including **full support for multi-modal (vision) questions**.
 
 This tool is designed for serious prompt engineering research. It allows you to:
--   **Test any prompt** against standardized, version-controlled datasets.
+-   **Test any prompt** against standardized, version-controlled datasets, including vision benchmarks.
+-   **Replicate official benchmark methodologies** with support for separate `system` and `user` prompts.
 -   Use powerful **LLM-based judges** for accurate, semantic grading with guaranteed structured output.
 -   Benefit from a **two-step pipeline** that separates expensive generation from repeatable judging, saving time and API credits.
 -   Produce **self-contained, timestamped, and auditable artifacts** for every experiment, ensuring perfect reproducibility.
@@ -15,7 +16,7 @@ This tool is designed for serious prompt engineering research. It allows you to:
 ## Core Philosophy
 
 `PromptMetrics` is designed as a scientific instrument. It is built on three key principles:
-1.  **Focused Responsibility:** It does one thing and does it well: it **measures prompt performance**. It is designed to work with, but remain separate from, tools that generate prompt ideas.
+1.  **Focused Responsibility:** It does one thing and does it well: it **measures prompt and model performance**. It is designed to work with, but remain separate from, tools that generate prompt ideas.
 2.  **Iterative Research:** The architecture allows you to easily re-run evaluations with new judging models or prompts, creating a non-destructive audit trail of your research.
 3.  **Modern Engineering:** Built with a state-of-the-art toolchain (`uv`, `pytest`, `ruff`, `mypy`) for reliability, speed, and long-term maintainability.
 
@@ -36,7 +37,7 @@ This tool is designed for serious prompt engineering research. It allows you to:
     ```
 
 3.  **Create Environment & Install Dependencies:**
-    This single command creates a virtual environment in `.venv` and installs all necessary packages from `pyproject.toml` and `uv.lock`.
+    This single command creates a virtual environment in `.venv` and installs all necessary packages.
     ```bash
     uv sync --dev
     ```
@@ -61,16 +62,14 @@ The evaluation process is a simple two-step pipeline. All commands are run with 
 
 ### Step 1: Generate Predictions
 
-This step runs your chosen prompt against a benchmark and saves the model's raw responses into a timestamped, self-contained JSON file.
+This step runs your chosen prompt and model against a benchmark, saving the raw responses into a timestamped, self-contained JSON file.
 
-The `--prompt_source` argument is flexible:
--   Use a simple name (e.g., `chain_of_thought`) to load a built-in prompt from the `prompts/public/{benchmark}/generation/` directory.
--   Provide a file path (e.g., `my_prompts/custom.txt`) to use your own external prompt.
+**For Multi-Modal Benchmarks:** `PromptMetrics` automatically checks if your chosen model supports vision. If not, it will warn you and ask for confirmation before proceeding with a text-only run.
 
 ```bash
-# Example using a built-in prompt on 3 samples
+# Example running the multi-modal HLE benchmark with a vision model
 uv run pm-generate \
-  --model "mistralai/mistral-small-3.2-24b-instruct:free" \
+  --model "openai/gpt-4o" \
   --benchmark "hle" \
   --prompt_source "chain_of_thought" \
   --max_samples 3
@@ -84,7 +83,7 @@ This step takes the generated artifact and uses a powerful "judge" LLM to grade 
 ```bash
 # Paste the full path from the previous command as the --input_file
 uv run pm-judge \
-  --input_file "results/hle/mistralai_.../public-chain_of_thought/predictions/20250808..._predictions.json" \
+  --input_file "results/hle/openai_gpt-4o/.../predictions/20250810..._predictions.json" \
   --judge_model "openai/gpt-4o"
 ```
 This command will:
@@ -95,10 +94,79 @@ This command will:
 
 ```
 --- Final Score ---
-Model: mistralai/mistral-small-3.2-24b-instruct:free
+Model: openai/gpt-4o
 Prompt Source: chain_of_thought
 Judged By: openai/gpt-4o (with prompt 'judge_v1')
-Accuracy: 33.33% (1/3 correct)
+Accuracy: 66.67% (2/3 correct)
+```
+
+### Advanced Usage
+
+#### Writing Custom Prompts (System & User Roles)
+
+For full control over the model's behavior, you can create your own prompt files. `PromptMetrics` uses simple separators to define message roles, giving you maximum flexibility. The `{question}` placeholder is always required in the user message.
+
+**Option 1: System and User Prompts**
+This is the most powerful format for modern chat models.
+```txt
+---[SYSTEM]---
+You are a helpful assistant specializing in astrophysics. Your answers should be concise and accurate.
+
+---[USER]---
+Please answer the following question.
+Question: {question}
+```
+
+**Option 2: User Prompt Only**
+If you only need a user prompt, simply use the `---[USER]---` separator.
+```txt
+---[USER]---
+State your final answer clearly.
+
+---
+Question:
+{question}
+---
+
+Answer:
+```
+
+**Option 3: Legacy Format (Backward Compatibility)**
+If no separators are found, the entire file is treated as a single user message.
+```txt
+This is a simple prompt about a {question}.
+```
+You can use any of these custom prompt formats by providing the file path to the `--prompt_source` argument.
+
+#### Replicating Official Benchmarks
+
+`PromptMetrics` allows for high-fidelity replication of official benchmarks by using their specific prompts and judging criteria.
+
+**1. Use Official Prompts:** Built-in official prompts can be selected via `--prompt_source` and `--judge_prompt_source`. For example, to run the official HLE generation and judging workflow:
+```bash
+# Generate using the official HLE system/user prompt format
+uv run pm-generate \
+  --model "openai/gpt-4o" \
+  --benchmark "hle" \
+  --prompt_source "official_v1" \
+  --max_samples 3
+
+# Judge using the official HLE judge prompt for advanced metrics
+uv run pm-judge \
+  --input_file "results/hle/openai_gpt-4o/.../predictions/...(new file).json" \
+  --judge_prompt_source "official_judge_v1"
+```
+
+**2. Get Advanced Metrics:** When using an official judge prompt, the final output will include specialized metrics like **Expected Calibration Error (ECE)**.
+
+```
+--- Final Score ---
+Model: openai/gpt-4o
+Prompt Source: official_v1
+Judged By: openai/gpt-4o (with prompt 'official_judge_v1')
+Accuracy: 66.67% +/- 38.49% (CI 95%)
+Correct: 2 / 3
+Expected Calibration Error (ECE): 25.50%
 ```
 
 ## Understanding the Results
