@@ -12,7 +12,7 @@ load_dotenv()
 class OfficialHLEEvaluation(BaseModel):
     """Pydantic model for the structured output of the official HLE evaluation prompt."""
 
-    extracted_final_answer: str | None
+    extracted_final_answer: str | None = None
     reasoning: str
     correct: Literal["yes", "no"] | None = None
     confidence: int = Field(ge=0, le=100, default=100)
@@ -54,9 +54,14 @@ class HLEBenchmark(BaseBenchmark):
             infos = get_dataset_infos(self.dataset_name, token=hf_token)
             return infos[self.dataset_config].splits[self.dataset_split].num_examples
         except (HfHubHTTPError, KeyError) as e:
+            print("\n--- ⚠️  Warning: Slow Dataset Size Calculation ---")
             print(
-                f"Warning: Could not quickly get dataset size due to an error ('{type(e).__name__}'). "
-                "Falling back to slower full data load. This is expected if offline."
+                f"Could not quickly fetch dataset size due to a '{type(e).__name__}' error. "
+                "This is expected if you are offline or the dataset requires authentication."
+            )
+            print(
+                "Falling back to a full data load to determine the size. "
+                "This will be slower and may consume significant memory and network bandwidth."
             )
             return len(self.load_data())
 

@@ -7,51 +7,19 @@ import numpy as np
 from pathlib import Path
 from tqdm.asyncio import tqdm_asyncio
 from pydantic import BaseModel
-from typing import Tuple, Dict, Any
+from typing import Dict, Any
 from collections import defaultdict
 
 from promptmetrics.registry import get_benchmark_instance
 from promptmetrics.llm_providers.openrouter import OpenRouterLLM
 from promptmetrics.logging_utils import setup_logger
+from promptmetrics.utils import load_prompt_template
 
 
 class EvaluationVerdict(BaseModel):
-    is_correct: bool | None
-    extracted_answer: str | None
+    is_correct: bool | None = None
+    extracted_answer: str | None = None
     reasoning: str
-
-
-def load_evaluation_prompt_template(
-    prompt_source: str, benchmark_name: str
-) -> Tuple[str, Path, str]:
-    if Path(prompt_source).is_file():
-        path = Path(prompt_source)
-        return path.read_text(encoding="utf-8"), path, "external"
-
-    prompt_name_with_ext = f"{prompt_source}.txt"
-    private_path = (
-        Path("prompts")
-        / "private"
-        / benchmark_name
-        / "evaluation"
-        / prompt_name_with_ext
-    )
-    if private_path.exists():
-        return private_path.read_text(encoding="utf-8"), private_path, "private"
-
-    public_path = (
-        Path("prompts")
-        / "public"
-        / benchmark_name
-        / "evaluation"
-        / prompt_name_with_ext
-    )
-    if public_path.exists():
-        return public_path.read_text(encoding="utf-8"), public_path, "public"
-
-    raise FileNotFoundError(
-        f"Evaluation prompt '{prompt_source}' not found as a file or in any of the evaluation search paths."
-    )
 
 
 def calculate_ece(confidence: np.ndarray, correct: np.ndarray, n_bins=10) -> float:
@@ -96,6 +64,12 @@ async def main_async():
         type=int,
         default=10,
         help="Number of concurrent evaluation requests.",
+    )
+    parser.add_argument(
+        "--evaluator_max_tokens",
+        type=int,
+        default=4096,
+        help="Maximum number of completion tokens for the evaluator model.",
     )
     parser.add_argument(
         "--allow-full-run",
@@ -154,7 +128,7 @@ async def main_async():
 
     evaluator_llm = OpenRouterLLM(model_name=args.evaluator_model)
     evaluation_prompt_template, evaluation_prompt_path, evaluation_prompt_type = (
-        load_evaluation_prompt_template(evaluation_prompt_source, benchmark.name)
+        load_prompt_template(evaluation_prompt_source, benchmark.name, "evaluation")
     )
 
     loaded_questions = benchmark.load_data(ids_to_load=required_ids)
@@ -202,7 +176,9 @@ async def main_async():
             eval_prompt = evaluation_prompt_template.format_map(format_map)
 
             verdict_obj = await evaluator_llm.generate_structured(
-                eval_prompt, response_model=verdict_model
+                eval_prompt,
+                response_model=verdict_model,
+                max_tokens=args.evaluator_max_tokens,
             )
 
             evaluation_dict = verdict_obj.model_dump()
@@ -263,6 +239,7 @@ async def main_async():
         "prompt_source_type": evaluation_prompt_type,
         "prompt_file": str(evaluation_prompt_path),
         "source_generations_file": args.input_file.name,
+        "max_tokens": args.evaluator_max_tokens,
         "evaluated_at_utc": timestamp,
     }
 

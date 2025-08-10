@@ -43,9 +43,10 @@ This tool is designed for serious prompt engineering research. It allows you to:
     ```
 
 4.  **Set Up Your API Keys:**
-    Create a file named `.env` in the project root by copying the example. Then, add your API keys.
+    Create a file named `.env` in the project root. Then, add your API keys.
     ```bash
-    cp .env.example .env
+    # Create the file
+    touch .env
     ```
     Now, edit the `.env` file with your keys:
     ```ini
@@ -69,7 +70,7 @@ This step runs your chosen prompt and model against a benchmark, saving the raw 
 uv run pm-generate \
   --model "openai/gpt-4o" \
   --benchmark "hle" \
-  --generation_prompt_source "chain_of_thought" \
+  --generation_prompt_source "official_generation_v1" \
   --max_samples 3
 ```
 The script will print the full path to the generated artifact, which you will use in the next step.
@@ -81,7 +82,7 @@ This step takes the generated artifact and uses a powerful "evaluator" LLM to gr
 ```bash
 # Paste the full path from the previous command as the --input_file
 uv run pm-evaluate \
-  --input_file "results/hle/openai_gpt-4o/.../generations/20250810..._generations.json" \
+  --input_file "results/hle/openai_gpt-4o/public-official_generation_v1/generations/20250810..._generations.json" \
   --evaluator_model "openai/gpt-4o" \
   --evaluation_prompt_source "official_evaluation_v1"
 ```
@@ -89,14 +90,16 @@ This command will:
 1.  Read the generations file.
 2.  Use the specified evaluator model to evaluate each answer with guaranteed structured output.
 3.  Save the detailed evaluations to a new timestamped file in the `evaluations/` directory.
-4.  Print the final, trustworthy accuracy score to your console.
+4.  Print the final, trustworthy score to your console, including advanced metrics for official evaluations.
 
 ```
 --- Final Score ---
 Model: openai/gpt-4o
-Generation Prompt: chain_of_thought
+Generation Prompt: official_generation_v1
 Evaluated By: openai/gpt-4o (with prompt 'official_evaluation_v1')
-Accuracy: 66.67% (2/3 correct)
+Accuracy: 66.67% +/- 38.49% (CI 95%)
+Correct: 2 / 3
+Expected Calibration Error (ECE): 25.50%
 ```
 
 ## Advanced Usage
@@ -151,7 +154,7 @@ uv run pm-generate \
 
 # Evaluate using the official HLE evaluation prompt for advanced metrics
 uv run pm-evaluate \
-  --input_file "results/hle/openai_gpt-4o/.../generations/...(new file).json" \
+  --input_file "results/hle/openai_gpt-4o/public-official_generation_v1/generations/...(new file).json" \
   --evaluation_prompt_source "official_evaluation_v1"
 ```
 

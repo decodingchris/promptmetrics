@@ -121,12 +121,13 @@ class OpenRouterLLM:
             return {"content": f"API_ERROR: {e}", "reasoning": None}
 
     async def generate_structured(
-        self, prompt: str, response_model: Type[T]
+        self, prompt: str, response_model: Type[T], max_tokens: int = 4096
     ) -> T:
         log_payload = {
             "model": self.model_name,
             "prompt": prompt,
             "response_model": response_model.__name__,
+            "max_tokens": max_tokens,
         }
         logger.info(
             json.dumps({"event": "generate_structured_request", "payload": log_payload})
@@ -139,7 +140,7 @@ class OpenRouterLLM:
                 response_format=response_model,
                 temperature=0.0,
                 extra_headers=self.headers,
-                max_tokens=1024,
+                max_tokens=max_tokens,
             )
 
             message = completion.choices[0].message

@@ -1,48 +1,15 @@
 import argparse
 import json
-import os
 import asyncio
 import datetime
 from pathlib import Path
 from tqdm.asyncio import tqdm_asyncio
-from typing import Tuple, List, Dict, Any
+from typing import List, Dict, Any
 
 from promptmetrics.registry import get_benchmark_instance
 from promptmetrics.llm_providers.openrouter import OpenRouterLLM
 from promptmetrics.logging_utils import setup_logger
-
-
-def load_prompt_template(
-    prompt_source: str, benchmark_name: str
-) -> Tuple[str, Path, str]:
-    if os.path.isfile(prompt_source):
-        path = Path(prompt_source)
-        return path.read_text(encoding="utf-8"), path, "external"
-
-    prompt_name_with_ext = f"{prompt_source}.txt"
-    private_path = (
-        Path("prompts")
-        / "private"
-        / benchmark_name
-        / "generation"
-        / prompt_name_with_ext
-    )
-    if private_path.exists():
-        return private_path.read_text(encoding="utf-8"), private_path, "private"
-
-    public_path = (
-        Path("prompts")
-        / "public"
-        / benchmark_name
-        / "generation"
-        / prompt_name_with_ext
-    )
-    if public_path.exists():
-        return public_path.read_text(encoding="utf-8"), public_path, "public"
-
-    raise FileNotFoundError(
-        f"Prompt '{prompt_source}' not found as a file or in public/private generation directories."
-    )
+from promptmetrics.utils import load_prompt_template
 
 
 def adapt_messages_for_text_only(
@@ -161,7 +128,7 @@ async def main_async():
             return
 
     prompt_template, resolved_prompt_path, source_type = load_prompt_template(
-        generation_prompt_source, benchmark.name
+        generation_prompt_source, benchmark.name, "generation"
     )
     prompt_name = Path(generation_prompt_source).stem
     if source_type == "public":
