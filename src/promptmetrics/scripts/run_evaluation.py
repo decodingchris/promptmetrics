@@ -6,10 +6,10 @@ import math
 import numpy as np
 from pathlib import Path
 from tqdm.asyncio import tqdm_asyncio
-from pydantic import BaseModel, Field
-from typing import Tuple, Dict, Any, Literal
+from pydantic import BaseModel
+from typing import Tuple, Dict, Any
 
-from promptmetrics.benchmarks.hle import HLEBenchmark
+from promptmetrics.registry import get_benchmark_instance
 from promptmetrics.llm_providers.openrouter import OpenRouterLLM
 from promptmetrics.logging_utils import setup_logger
 
@@ -18,20 +18,6 @@ class EvaluationVerdict(BaseModel):
     is_correct: bool | None
     extracted_answer: str | None
     reasoning: str
-
-
-class OfficialHLEEvaluation(BaseModel):
-    extracted_final_answer: str | None
-    reasoning: str
-    correct: Literal["yes", "no"]
-    confidence: int = Field(ge=0, le=100)
-
-
-def get_benchmark_instance(name: str):
-    if name.lower() == "hle":
-        return HLEBenchmark()
-    else:
-        raise ValueError(f"Unknown benchmark: {name}")
 
 
 def load_evaluation_prompt_template(
@@ -102,7 +88,7 @@ async def main_async():
     parser.add_argument(
         "--evaluation_prompt_source",
         required=True,
-        help="Name of a built-in evaluation prompt or path to a custom one.",
+        help="Name of a built-in evaluation prompt, path to a custom prompt file, or 'official' to use the benchmark's default.",
     )
     parser.add_argument(
         "--num_workers",
@@ -147,24 +133,45 @@ async def main_async():
     benchmark = get_benchmark_instance(generation_metadata["benchmark"])
     timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
+    evaluation_prompt_source = args.evaluation_prompt_source
+    if evaluation_prompt_source.lower() == "official":
+        if benchmark.official_evaluation_prompt_name:
+            evaluation_prompt_source = benchmark.official_evaluation_prompt_name
+            print(
+                f"Using official evaluation prompt for '{benchmark.name}': '{evaluation_prompt_source}'"
+            )
+        else:
+            raise ValueError(
+                f"The benchmark '{benchmark.name}' does not have an official evaluation prompt defined."
+            )
+
     log_base_str = str(args.input_file.parent.parent).replace("results", "logs", 1)
     log_dir = Path(log_base_str) / "evaluation"
     setup_logger(log_dir, f"{timestamp}_evaluation.log")
 
     evaluator_llm = OpenRouterLLM(model_name=args.evaluator_model)
     evaluation_prompt_template, evaluation_prompt_path, evaluation_prompt_type = (
-        load_evaluation_prompt_template(args.evaluation_prompt_source, benchmark.name)
+        load_evaluation_prompt_template(evaluation_prompt_source, benchmark.name)
     )
     questions_map = {q["id"]: q for q in benchmark.load_data()}
 
-    evaluation_prompt_name = Path(args.evaluation_prompt_source).stem
-    if evaluation_prompt_name == "official_evaluation_v1":
-        verdict_model = OfficialHLEEvaluation
-        is_official_evaluation = True
-        print("Using Official HLE Evaluation prompt and metrics.")
+    evaluation_prompt_name = Path(evaluation_prompt_source).stem
+    is_official_evaluation = (
+        evaluation_prompt_name == benchmark.official_evaluation_prompt_name
+    )
+
+    if is_official_evaluation and benchmark.official_evaluation_model:
+        verdict_model = benchmark.official_evaluation_model
+        print(f"Using Official {benchmark.name.upper()} Evaluation prompt and metrics.")
     else:
         verdict_model = EvaluationVerdict
         is_official_evaluation = False
+        if evaluation_prompt_name == benchmark.official_evaluation_prompt_name:
+            print(
+                f"Warning: Prompt '{evaluation_prompt_name}' appears to be an official prompt, "
+                f"but no specific evaluation model is defined for the '{benchmark.name}' benchmark. "
+                "Falling back to default evaluation format."
+            )
 
     evaluations_dir = args.input_file.parent.parent / "evaluations"
     evaluations_dir.mkdir(parents=True, exist_ok=True)
@@ -181,12 +188,15 @@ async def main_async():
     async def evaluate_item(q_id, gen_data):
         async with semaphore:
             question_data = questions_map[q_id]
-            eval_prompt = evaluation_prompt_template.format(
-                answer_type=question_data["answer_type"],
-                question=question_data["question"],
-                correct_answer=question_data["answer"],
-                model_response=gen_data["response"],
-            )
+
+            format_dict = {
+                **question_data,
+                "correct_answer": question_data.get("answer"),
+                "model_response": gen_data.get("response"),
+            }
+
+            eval_prompt = evaluation_prompt_template.format(**format_dict)
+
             verdict_obj = await evaluator_llm.generate_structured(
                 eval_prompt, response_model=verdict_model
             )
@@ -275,7 +285,7 @@ async def main_async():
     print(f"Model: {generation_metadata['model']}")
     print(f"Generation Prompt: {generation_metadata['prompt_source']}")
     print(
-        f"Evaluated By: {evaluation_metadata['model']} (with prompt '{evaluation_metadata['prompt_source']}')"
+        f"Evaluated By: {evaluation_metadata['model']} (with prompt '{args.evaluation_prompt_source}')"
     )
 
     if is_official_evaluation and total_evaluated > 0:

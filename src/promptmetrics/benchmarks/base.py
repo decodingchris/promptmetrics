@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List, Union, Type
+from pydantic import BaseModel
 
 MessageContentType = Union[str, List[Dict[str, Any]]]
 
@@ -12,6 +13,30 @@ class BaseBenchmark(ABC):
     ensuring that the core evaluation scripts can work with any benchmark
     that implements this interface.
     """
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """The canonical, lower-case name of the benchmark."""
+        pass
+
+    @property
+    @abstractmethod
+    def official_generation_prompt_name(self) -> str | None:
+        """The filename stem of the official generation prompt, if one exists."""
+        pass
+
+    @property
+    @abstractmethod
+    def official_evaluation_prompt_name(self) -> str | None:
+        """The filename stem of the official evaluation prompt, if one exists."""
+        pass
+
+    @property
+    @abstractmethod
+    def official_evaluation_model(self) -> Type[BaseModel] | None:
+        """The Pydantic model for parsing official evaluation verdicts."""
+        pass
 
     @property
     @abstractmethod

@@ -7,16 +7,9 @@ from pathlib import Path
 from tqdm.asyncio import tqdm_asyncio
 from typing import Tuple, List, Dict, Any
 
-from promptmetrics.benchmarks.hle import HLEBenchmark
+from promptmetrics.registry import get_benchmark_instance
 from promptmetrics.llm_providers.openrouter import OpenRouterLLM
 from promptmetrics.logging_utils import setup_logger
-
-
-def get_benchmark_instance(name: str):
-    if name.lower() == "hle":
-        return HLEBenchmark()
-    else:
-        raise ValueError(f"Unknown benchmark: {name}")
 
 
 def load_prompt_template(
@@ -85,7 +78,7 @@ async def main_async():
     parser.add_argument(
         "--generation_prompt_source",
         required=True,
-        help="Name of a built-in generation prompt or path to a custom prompt file.",
+        help="Name of a built-in generation prompt, path to a custom prompt file, or 'official' to use the benchmark's default.",
     )
     parser.add_argument(
         "--temperature",
@@ -119,6 +112,16 @@ async def main_async():
     args = parser.parse_args()
 
     benchmark = get_benchmark_instance(args.benchmark)
+
+    generation_prompt_source = args.generation_prompt_source
+    if generation_prompt_source.lower() == "official":
+        if benchmark.official_generation_prompt_name:
+            generation_prompt_source = benchmark.official_generation_prompt_name
+            print(f"Using official generation prompt for '{benchmark.name}': '{generation_prompt_source}'")
+        else:
+            raise ValueError(
+                f"The benchmark '{benchmark.name}' does not have an official generation prompt defined."
+            )
 
     if not args.allow_full_run and args.max_samples is None:
         total_samples = benchmark.get_size()
@@ -158,9 +161,9 @@ async def main_async():
             return
 
     prompt_template, resolved_prompt_path, source_type = load_prompt_template(
-        args.generation_prompt_source, benchmark.name
+        generation_prompt_source, benchmark.name
     )
-    prompt_name = Path(args.generation_prompt_source).stem
+    prompt_name = Path(generation_prompt_source).stem
     if source_type == "public":
         experiment_name = f"public-{prompt_name}"
     elif source_type == "private":

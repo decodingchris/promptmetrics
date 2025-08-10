@@ -1,20 +1,46 @@
 import os
 from datasets import load_dataset, get_dataset_infos
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Type, Literal
+from pydantic import BaseModel, Field
 from .base import BaseBenchmark, MessageContentType
 from dotenv import load_dotenv
 
 load_dotenv()
 
 
+class OfficialHLEEvaluation(BaseModel):
+    """Pydantic model for the structured output of the official HLE evaluation prompt."""
+
+    extracted_final_answer: str | None
+    reasoning: str
+    correct: Literal["yes", "no"]
+    confidence: int = Field(ge=0, le=100)
+
+
 class HLEBenchmark(BaseBenchmark):
     """Implementation for the Humanity's Last Exam (HLE) benchmark."""
 
     def __init__(self):
-        self.name = "hle"
+        self._name = "hle"
         self.dataset_name = "cais/hle"
         self.dataset_config = "default"
         self.dataset_split = "test"
+
+    @property
+    def name(self) -> str:
+        return self._name
+    
+    @property
+    def official_generation_prompt_name(self) -> str | None:
+        return "official_generation_v1"
+
+    @property
+    def official_evaluation_prompt_name(self) -> str | None:
+        return "official_evaluation_v1"
+
+    @property
+    def official_evaluation_model(self) -> Type[BaseModel] | None:
+        return OfficialHLEEvaluation
 
     @property
     def is_multimodal(self) -> bool:
@@ -27,6 +53,7 @@ class HLEBenchmark(BaseBenchmark):
             infos = get_dataset_infos(self.dataset_name, token=hf_token)
             return infos[self.dataset_config].splits[self.dataset_split].num_examples
         except Exception:
+            # Fallback for offline or other errors
             return len(self.load_data())
 
     def load_data(self, max_samples: int | None = None) -> List[Dict[str, Any]]:
