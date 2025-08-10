@@ -86,7 +86,7 @@ async def main_async():
         
     generation_metadata = data['metadata']['generation']
     generations = data['generations']
-    was_mismatched = generation_metadata.get("is_mismatched_run", False)
+    modality_info = generation_metadata.get("modality_handling")
 
     if not args.allow_full_run:
         num_to_evaluate = len(generations)
@@ -224,8 +224,8 @@ async def main_async():
     else:
         print(f"Accuracy: {summary_metrics['accuracy']}% ({summary_metrics['correct_count']}/{summary_metrics['total_evaluated']} correct)")
     
-    if was_mismatched:
-        print("\n⚠️  NOTE: This score was generated from a text-only run on a multi-modal benchmark.")
+    if modality_info:
+        print(f"\n⚠️  NOTE: {modality_info['note']}")
         print("   The results may not be directly comparable to standard, multi-modal evaluations.")
 
 

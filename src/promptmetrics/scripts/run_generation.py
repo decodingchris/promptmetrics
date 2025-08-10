@@ -83,14 +83,15 @@ async def main_async():
 
     llm = OpenRouterLLM(model_name=args.model)
 
-    is_mismatched_run = False 
+    modality_handling_info = None
     
     if benchmark.is_multimodal and not llm.supports_vision:
-        is_mismatched_run = True
+        modality_handling_info = {
+            "status": "text_only_fallback",
+            "note": "The benchmark is multi-modal, but the model is text-only. Images were omitted from prompts."
+        }
         print("\n--- ⚠️  Warning: Modality Mismatch ---")
-        print(f"Benchmark '{args.benchmark}' is multi-modal (contains images).")
-        print(f"Model '{args.model}' does not support image input.")
-        print("Images will be omitted from the prompts. This may significantly affect the model's performance.")
+        print(modality_handling_info["note"])
         confirm = input("Do you want to continue with this text-only evaluation? (y/N): ").lower().strip()
         if confirm not in ['y', 'yes']:
             print("Evaluation cancelled.")
@@ -124,7 +125,7 @@ async def main_async():
         async with semaphore:
             messages = benchmark.format_prompt_messages(question, prompt_template)
             
-            if is_mismatched_run:
+            if modality_handling_info:
                 messages = adapt_messages_for_text_only(messages)
 
             response_data = await llm.generate(messages, temperature=args.temperature, max_tokens=args.max_tokens)
@@ -149,9 +150,11 @@ async def main_async():
         "prompt_file": str(resolved_prompt_path),
         "temperature": args.temperature,
         "max_tokens": args.max_tokens,
-        "is_mismatched_run": is_mismatched_run,
         "generated_at_utc": timestamp,
     }
+
+    if modality_handling_info:
+        generation_metadata["modality_handling"] = modality_handling_info
 
     output_data = {
         "metadata": {
