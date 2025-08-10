@@ -27,4 +27,11 @@ def setup_logger(log_dir: Path, filename: str):
     console_handler.setLevel(logging.WARNING)
     logger.addHandler(console_handler)
 
-    logger.info(f"Logger configured. Saving detailed logs to: {log_filepath.resolve()}")
+    absolute_log_path = log_filepath.resolve()
+    
+    try:
+        display_path = absolute_log_path.relative_to(Path.cwd())
+    except ValueError:
+        display_path = absolute_log_path
+        
+    logger.info(f"Logger configured. Saving detailed logs to: {display_path}")

@@ -50,7 +50,6 @@ def load_evaluation_prompt_template(prompt_source: str, benchmark_name: str) -> 
     )
 
 def calculate_ece(confidence: np.ndarray, correct: np.ndarray, n_bins=10) -> float:
-    """Calculates Expected Calibration Error (ECE)."""
     if len(confidence) == 0:
         return 0.0
     bin_boundaries = np.linspace(0, 1, n_bins + 1)
@@ -70,16 +69,17 @@ async def main_async():
     parser = argparse.ArgumentParser(description="Evaluate model responses and save a complete artifact with summary metrics.")
     parser.add_argument("--input_file", required=True, type=Path, help="Path to the timestamped generations.json file.")
     parser.add_argument("--evaluator_model", default="mistralai/mistral-small-3.2-24b-instruct:free", help="LLM to use as the evaluator.")
-    parser.add_argument("--evaluation_prompt_source", default="official_evaluation_v1", help="Name of a built-in evaluation prompt or path to a custom one.")
+    parser.add_argument("--evaluation_prompt_source", required=True, help="Name of a built-in evaluation prompt or path to a custom one.")
     parser.add_argument("--num_workers", type=int, default=10, help="Number of concurrent evaluation requests.")
     args = parser.parse_args()
 
     if not args.input_file.exists():
-        raise FileNotFoundError(f"Input file not found: {args.input_f}")
+        raise FileNotFoundError(f"Input file not found: {args.input_file}")
 
     with open(args.input_file) as f:
         data = json.load(f)
-    generation_metadata = data['metadata']
+        
+    generation_metadata = data['metadata']['generation']
     generations = data['generations']
     was_mismatched = generation_metadata.get("is_mismatched_run", False)
 
@@ -174,15 +174,19 @@ async def main_async():
         ece = calculate_ece(conf_array, correct_array)
         summary_metrics["expected_calibration_error"] = round(ece * 100, 2)
 
+    evaluation_metadata = {
+        "model": args.evaluator_model,
+        "prompt_source": args.evaluation_prompt_source,
+        "prompt_source_type": evaluation_prompt_type,
+        "prompt_file": str(evaluation_prompt_path),
+        "source_generations_file": args.input_file.name,
+        "evaluated_at_utc": timestamp
+    }
+
     final_evaluation_data = {
         "metadata": {
-            **generation_metadata,
-            "source_file": args.input_file.name,
-            "evaluated_by": args.evaluator_model,
-            "evaluation_prompt_source": args.evaluation_prompt_source,
-            "evaluation_prompt_source_type": evaluation_prompt_type,
-            "evaluation_prompt_file": str(evaluation_prompt_path),
-            "evaluated_at_utc": timestamp,
+            "generation": generation_metadata,
+            "evaluation": evaluation_metadata
         },
         "summary_metrics": summary_metrics,
         "evaluations": evaluations,
@@ -194,8 +198,8 @@ async def main_async():
 
     print("\n--- Final Score ---")
     print(f"Model: {generation_metadata['model']}")
-    print(f"Prompt Source: {generation_metadata['prompt_source']}")
-    print(f"Evaluated By: {args.evaluator_model} (with prompt '{args.evaluation_prompt_source}')")
+    print(f"Generation Prompt: {generation_metadata['prompt_source']}")
+    print(f"Evaluated By: {evaluation_metadata['model']} (with prompt '{evaluation_metadata['prompt_source']}')")
     
     if is_official_evaluation and total_evaluated > 0:
         print(f"Accuracy: {summary_metrics['accuracy']}% +/- {summary_metrics['accuracy_ci_95']}% (CI 95%)")

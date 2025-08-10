@@ -36,7 +36,6 @@ def load_prompt_template(prompt_source: str, benchmark_name: str) -> Tuple[str, 
     )
 
 def adapt_messages_for_text_only(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Strips images from messages and adds a note, for text-only models."""
     text_only_messages = []
     for msg in messages:
         if not isinstance(msg.get("content"), list):
@@ -57,7 +56,7 @@ async def main_async():
     parser = argparse.ArgumentParser(description="Generate model responses for an evaluation.")
     parser.add_argument("--model", required=True, help="OpenRouter model name.")
     parser.add_argument("--benchmark", required=True, help="Name of the benchmark to run (e.g., 'hle').")
-    parser.add_argument("--prompt_source", required=True, help="Name of a built-in generation prompt or path to a custom prompt file.")
+    parser.add_argument("--generation_prompt_source", required=True, help="Name of a built-in generation prompt or path to a custom prompt file.")
     parser.add_argument("--temperature", type=float, default=0.0, help="The sampling temperature for the model.")
     parser.add_argument("--max_tokens", type=int, default=8192, help="Maximum number of completion tokens for the model.")
     parser.add_argument("--max_samples", type=int, default=None, help="Maximum number of samples to evaluate.")
@@ -82,8 +81,8 @@ async def main_async():
             print("Evaluation cancelled.")
             return
 
-    prompt_template, resolved_prompt_path, source_type = load_prompt_template(args.prompt_source, benchmark.name)
-    prompt_name = Path(args.prompt_source).stem
+    prompt_template, resolved_prompt_path, source_type = load_prompt_template(args.generation_prompt_source, benchmark.name)
+    prompt_name = Path(args.generation_prompt_source).stem
     if source_type == "public":
         experiment_name = f"public-{prompt_name}"
     elif source_type == "private":
@@ -127,17 +126,21 @@ async def main_async():
         if q_id:
             generations[q_id] = generation_data
 
+    generation_metadata = {
+        "model": args.model,
+        "benchmark": args.benchmark,
+        "prompt_source": args.generation_prompt_source,
+        "prompt_source_type": source_type,
+        "prompt_file": str(resolved_prompt_path),
+        "temperature": args.temperature,
+        "max_tokens": args.max_tokens,
+        "is_mismatched_run": is_mismatched_run,
+        "generated_at_utc": timestamp,
+    }
+
     output_data = {
         "metadata": {
-            "model": args.model,
-            "benchmark": args.benchmark,
-            "prompt_source": args.prompt_source,
-            "prompt_source_type": source_type,
-            "prompt_file": str(resolved_prompt_path),
-            "temperature": args.temperature,
-            "max_tokens": args.max_tokens,
-            "generated_at_utc": timestamp,
-            "is_mismatched_run": is_mismatched_run,
+            "generation": generation_metadata
         },
         "generations": generations
     }
