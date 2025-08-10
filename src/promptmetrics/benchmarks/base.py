@@ -45,12 +45,19 @@ class BaseBenchmark(ABC):
         pass
 
     @abstractmethod
-    def load_data(self, max_samples: int | None = None) -> List[Dict[str, Any]]:
+    def load_data(
+        self,
+        max_samples: int | None = None,
+        ids_to_load: List[str] | None = None,
+    ) -> List[Dict[str, Any]]:
         """
         Loads the dataset for the benchmark.
 
+        This method should prioritize `ids_to_load` over `max_samples` if both are provided.
+
         Args:
             max_samples: The maximum number of samples to load. If None, load all.
+            ids_to_load: A specific list of sample IDs to load.
 
         Returns:
             A list of question dictionaries.

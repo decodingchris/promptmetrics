@@ -113,6 +113,8 @@ async def main_async():
     generations = data["generations"]
     modality_info = generation_metadata.get("modality_handling")
 
+    required_ids = list(generations.keys())
+
     if not args.allow_full_run:
         num_to_evaluate = len(generations)
         print("\n--- ⚠️  Warning: Full Evaluation Run ---")
@@ -153,7 +155,9 @@ async def main_async():
     evaluation_prompt_template, evaluation_prompt_path, evaluation_prompt_type = (
         load_evaluation_prompt_template(evaluation_prompt_source, benchmark.name)
     )
-    questions_map = {q["id"]: q for q in benchmark.load_data()}
+
+    loaded_questions = benchmark.load_data(ids_to_load=required_ids)
+    questions_map = {q["id"]: q for q in loaded_questions}
 
     evaluation_prompt_name = Path(evaluation_prompt_source).stem
     is_official_evaluation = (
