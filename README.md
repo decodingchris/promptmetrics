@@ -9,15 +9,15 @@ A modular toolkit for the rigorous evaluation and metric generation of LLM promp
 This tool is designed for serious prompt engineering research. It allows you to:
 -   **Test any prompt** against standardized, version-controlled datasets, including vision benchmarks.
 -   **Replicate official benchmark methodologies** with support for separate `system` and `user` prompts.
--   Use powerful **LLM-based judges** for accurate, semantic grading with guaranteed structured output.
--   Benefit from a **two-step pipeline** that separates expensive generation from repeatable judging, saving time and API credits.
+-   Use powerful **LLM-based evaluators** for accurate, semantic grading with guaranteed structured output.
+-   Benefit from a **two-step pipeline** that separates expensive generation from repeatable evaluation, saving time and API credits.
 -   Produce **self-contained, timestamped, and auditable artifacts** for every experiment, ensuring perfect reproducibility.
 
 ## Core Philosophy
 
 `PromptMetrics` is designed as a scientific instrument. It is built on three key principles:
 1.  **Focused Responsibility:** It does one thing and does it well: it **measures prompt and model performance**. It is designed to work with, but remain separate from, tools that generate prompt ideas.
-2.  **Iterative Research:** The architecture allows you to easily re-run evaluations with new judging models or prompts, creating a non-destructive audit trail of your research.
+2.  **Iterative Research:** The architecture allows you to easily re-run evaluations with new evaluator models or prompts, creating a non-destructive audit trail of your research.
 3.  **Modern Engineering:** Built with a state-of-the-art toolchain (`uv`, `pytest`, `ruff`, `mypy`) for reliability, speed, and long-term maintainability.
 
 ## Installation & Setup
@@ -60,7 +60,7 @@ This tool is designed for serious prompt engineering research. It allows you to:
 
 The evaluation process is a simple two-step pipeline. All commands are run with `uv run` to ensure they execute within the project's managed environment.
 
-### Step 1: Generate Predictions
+### Step 1: Generate Model Outputs
 
 This step runs your chosen prompt and model against a benchmark, saving the raw responses into a timestamped, self-contained JSON file.
 
@@ -76,27 +76,27 @@ uv run pm-generate \
 ```
 The script will print the full path to the generated artifact, which you will use in the next step.
 
-### Step 2: Judge the Predictions
+### Step 2: Evaluate the Generations
 
-This step takes the generated artifact and uses a powerful "judge" LLM to grade each response.
+This step takes the generated artifact and uses a powerful "evaluator" LLM to grade each response.
 
 ```bash
 # Paste the full path from the previous command as the --input_file
-uv run pm-judge \
-  --input_file "results/hle/openai_gpt-4o/.../predictions/20250810..._predictions.json" \
-  --judge_model "openai/gpt-4o"
+uv run pm-evaluate \
+  --input_file "results/hle/openai_gpt-4o/.../generations/20250810..._generations.json" \
+  --evaluator_model "openai/gpt-4o"
 ```
 This command will:
-1.  Read the predictions file.
-2.  Use the specified judge model to evaluate each answer with guaranteed structured output.
-3.  Save the detailed verdicts to a new timestamped file in the `judged/` directory.
+1.  Read the generations file.
+2.  Use the specified evaluator model to evaluate each answer with guaranteed structured output.
+3.  Save the detailed evaluations to a new timestamped file in the `evaluations/` directory.
 4.  Print the final, trustworthy accuracy score to your console.
 
 ```
 --- Final Score ---
 Model: openai/gpt-4o
 Prompt Source: chain_of_thought
-Judged By: openai/gpt-4o (with prompt 'judge_v1')
+Evaluated By: openai/gpt-4o (with prompt 'evaluation_v1')
 Accuracy: 66.67% (2/3 correct)
 ```
 
@@ -140,9 +140,9 @@ You can use any of these custom prompt formats by providing the file path to the
 
 #### Replicating Official Benchmarks
 
-`PromptMetrics` allows for high-fidelity replication of official benchmarks by using their specific prompts and judging criteria.
+`PromptMetrics` allows for high-fidelity replication of official benchmarks by using their specific prompts and evaluation criteria.
 
-**1. Use Official Prompts:** Built-in official prompts can be selected via `--prompt_source` and `--judge_prompt_source`. For example, to run the official HLE generation and judging workflow:
+**1. Use Official Prompts:** Built-in official prompts can be selected via `--prompt_source` and `--evaluation_prompt_source`. For example, to run the official HLE generation and evaluation workflow:
 ```bash
 # Generate using the official HLE system/user prompt format
 uv run pm-generate \
@@ -151,19 +151,19 @@ uv run pm-generate \
   --prompt_source "official_v1" \
   --max_samples 3
 
-# Judge using the official HLE judge prompt for advanced metrics
-uv run pm-judge \
-  --input_file "results/hle/openai_gpt-4o/.../predictions/...(new file).json" \
-  --judge_prompt_source "official_judge_v1"
+# Evaluate using the official HLE evaluation prompt for advanced metrics
+uv run pm-evaluate \
+  --input_file "results/hle/openai_gpt-4o/.../generations/...(new file).json" \
+  --evaluation_prompt_source "official_evaluation_v1"
 ```
 
-**2. Get Advanced Metrics:** When using an official judge prompt, the final output will include specialized metrics like **Expected Calibration Error (ECE)**.
+**2. Get Advanced Metrics:** When using an official evaluation prompt, the final output will include specialized metrics like **Expected Calibration Error (ECE)**.
 
 ```
 --- Final Score ---
 Model: openai/gpt-4o
 Prompt Source: official_v1
-Judged By: openai/gpt-4o (with prompt 'official_judge_v1')
+Evaluated By: openai/gpt-4o (with prompt 'official_evaluation_v1')
 Accuracy: 66.67% +/- 38.49% (CI 95%)
 Correct: 2 / 3
 Expected Calibration Error (ECE): 25.50%
@@ -175,10 +175,10 @@ The `results/` directory is organized hierarchically for clarity and scalability
 `results/{benchmark_name}/{model_name}/{experiment_name}/`
 
 Each experiment folder contains two subdirectories:
--   `predictions/`: Contains the raw, timestamped output from the model being tested.
--   `judged/`: Contains one or more timestamped, judged artifacts, each corresponding to a specific judge model and judge prompt.
+-   `generations/`: Contains the raw, timestamped output from the model being tested.
+-   `evaluations/`: Contains one or more timestamped, evaluated artifacts, each corresponding to a specific evaluator model and evaluation prompt.
 
-The final `judged_...json` file is a complete record, containing all metadata, summary metrics, and the detailed verdicts for each question.
+The final `evaluations_...json` file is a complete record, containing all metadata, summary metrics, and the detailed evaluations for each question.
 
 ## For Developers
 

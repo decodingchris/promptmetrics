@@ -16,7 +16,7 @@ requires-python = ">= 3.11"
 # Defines clean command-line entry points
 [project.scripts]
 pm-generate = "promptmetrics.scripts.run_generation:main"
-pm-judge = "promptmetrics.scripts.run_judging:main"
+pm-evaluate = "promptmetrics.scripts.run_evaluation:main"
 
 # Defines dependencies only needed for development and testing
 [project.optional-dependencies]

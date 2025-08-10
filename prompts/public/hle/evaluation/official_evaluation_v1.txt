@@ -1,10 +1,10 @@
-Judge whether the following [response] to [question] is correct or not based on the precise and unambiguous [correct_answer] below.
+Evaluate whether the following [response] to [question] is correct or not based on the precise and unambiguous [correct_answer] below.
 
 [question]: {question}
 
 [response]: {model_response}
 
-Your judgement must be in the format and criteria specified below:
+Your evaluation must be in the format and criteria specified below:
 
 extracted_final_answer: The final exact answer extracted from the [response]. Put the extracted answer as 'None' if there is no exact, final answer to extract from the response.
 

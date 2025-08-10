@@ -97,12 +97,12 @@ async def main_async():
     log_dir = Path(f"logs/{benchmark.name}/{sanitized_model_name}/{experiment_name}/generation")
     setup_logger(log_dir, f"{timestamp}_generation.log")
 
-    output_dir = Path(f"results/{benchmark.name}/{sanitized_model_name}/{experiment_name}/predictions")
+    output_dir = Path(f"results/{benchmark.name}/{sanitized_model_name}/{experiment_name}/generations")
     output_dir.mkdir(parents=True, exist_ok=True)
-    predictions_filepath = output_dir / f"{timestamp}_predictions.json"
+    generations_filepath = output_dir / f"{timestamp}_generations.json"
 
     questions = benchmark.load_data(max_samples=args.max_samples)
-    predictions = {}
+    generations = {}
     
     semaphore = asyncio.Semaphore(args.num_workers)
     
@@ -114,18 +114,18 @@ async def main_async():
                 messages = adapt_messages_for_text_only(messages)
 
             response_data = await llm.generate(messages, temperature=args.temperature, max_tokens=args.max_tokens)
-            prediction = {
+            generation = {
                 "response": response_data.get("content"),
                 "reasoning": response_data.get("reasoning"),
             }
-            return question['id'], prediction
+            return question['id'], generation
 
     tasks = [generate_item(question) for question in questions]
     print(f"\nGenerating {len(tasks)} responses with {args.num_workers} concurrent workers...")
     results = await tqdm_asyncio.gather(*tasks)
-    for q_id, prediction_data in results:
+    for q_id, generation_data in results:
         if q_id:
-            predictions[q_id] = prediction_data
+            generations[q_id] = generation_data
 
     output_data = {
         "metadata": {
@@ -139,13 +139,13 @@ async def main_async():
             "generated_at_utc": timestamp,
             "is_mismatched_run": is_mismatched_run,
         },
-        "predictions": predictions
+        "generations": generations
     }
 
-    with open(predictions_filepath, "w", encoding='utf-8') as f:
+    with open(generations_filepath, "w", encoding='utf-8') as f:
         json.dump(output_data, f, indent=2)
 
-    print(f"\nPredictions saved to:\n{predictions_filepath.resolve()}")
+    print(f"\nGenerations saved to:\n{generations_filepath.resolve()}")
 
 def main():
     asyncio.run(main_async())

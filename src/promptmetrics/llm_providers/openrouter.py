@@ -137,7 +137,7 @@ class OpenRouterLLM:
             if not parsed_response:
                 unparsed_content = message.content or ""
                 reason = (
-                    f"Failed to parse model response. This usually means the judge model ('{self.model_name}') "
+                    f"Failed to parse model response. This usually means the evaluator model ('{self.model_name}') "
                     "does not support structured outputs or returned malformed JSON. "
                     f"Raw response: '{unparsed_content[:100]}...'"
                 )
@@ -156,9 +156,9 @@ class OpenRouterLLM:
             logger.error(json.dumps(error_details))
 
             helpful_reason = (
-                f"Judge API call failed with a '{type(e).__name__}'. This can happen if the judge model "
-                f"('{self.model_name}') does not support structured outputs. Try a different --judge_model, "
+                f"Evaluator API call failed with a '{type(e).__name__}'. This can happen if the evaluator model "
+                f"('{self.model_name}') does not support structured outputs. Try a different --evaluator_model, "
                 f"like 'mistralai/mistral-small-3.2-24b-instruct'. Original error: {e}"
             )
-            print(f"\n--- Judge API Error (generate_structured) for model {self.model_name}: {helpful_reason} ---")
+            print(f"\n--- Evaluator API Error (generate_structured) for model {self.model_name}: {helpful_reason} ---")
             return {"is_correct": None, "reasoning": helpful_reason, "extracted_answer": None}
