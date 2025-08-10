@@ -13,8 +13,8 @@ class OfficialHLEEvaluation(BaseModel):
 
     extracted_final_answer: str | None
     reasoning: str
-    correct: Literal["yes", "no"]
-    confidence: int = Field(ge=0, le=100)
+    correct: Literal["yes", "no"] | None = None
+    confidence: int = Field(ge=0, le=100, default=100)
 
 
 class HLEBenchmark(BaseBenchmark):
@@ -53,6 +53,7 @@ class HLEBenchmark(BaseBenchmark):
             infos = get_dataset_infos(self.dataset_name, token=hf_token)
             return infos[self.dataset_config].splits[self.dataset_split].num_examples
         except Exception:
+            # Fallback for offline or other errors
             return len(self.load_data())
 
     def load_data(
@@ -75,18 +76,13 @@ class HLEBenchmark(BaseBenchmark):
             print(
                 f"Optimized load: Loading {len(ids_to_load)} specific samples from the benchmark."
             )
-
             id_to_index = {id_val: i for i, id_val in enumerate(dataset["id"])}
-            
             indices_to_load = [
                 id_to_index[id_val] for id_val in ids_to_load if id_val in id_to_index
             ]
-            
             dataset = dataset.select(indices_to_load)
-
         elif max_samples:
             dataset = dataset.select(range(max_samples))
-
         return [sample for sample in dataset]
 
     def format_prompt_messages(

@@ -7,13 +7,12 @@ import httpx
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
 from pydantic import BaseModel
-from typing import Type, Union
+from typing import Type, TypeVar
 
 load_dotenv()
 logger = logging.getLogger("promptmetrics.llm_providers.openrouter")
 
-T = Type[BaseModel]
-StructuredResponse = Union[BaseModel, dict]
+T = TypeVar("T", bound=BaseModel)
 
 
 def get_model_details():
@@ -122,8 +121,8 @@ class OpenRouterLLM:
             return {"content": f"API_ERROR: {e}", "reasoning": None}
 
     async def generate_structured(
-        self, prompt: str, response_model: T
-    ) -> StructuredResponse:
+        self, prompt: str, response_model: Type[T]
+    ) -> T:
         log_payload = {
             "model": self.model_name,
             "prompt": prompt,
@@ -152,11 +151,7 @@ class OpenRouterLLM:
                         {"event": "generate_structured_refusal", "reason": reason}
                     )
                 )
-                return {
-                    "is_correct": None,
-                    "reasoning": reason,
-                    "extracted_answer": None,
-                }
+                return response_model(reasoning=reason)
 
             parsed_response = message.parsed
             if not parsed_response:
@@ -174,11 +169,7 @@ class OpenRouterLLM:
                         }
                     )
                 )
-                return {
-                    "is_correct": None,
-                    "reasoning": reason,
-                    "extracted_answer": None,
-                }
+                return response_model(reasoning=reason)
 
             logger.info(
                 json.dumps(
@@ -206,8 +197,4 @@ class OpenRouterLLM:
             print(
                 f"\n--- Evaluator API Error (generate_structured) for model {self.model_name}: {helpful_reason} ---"
             )
-            return {
-                "is_correct": None,
-                "reasoning": helpful_reason,
-                "extracted_answer": None,
-            }
+            return response_model(reasoning=helpful_reason)

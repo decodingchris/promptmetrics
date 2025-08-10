@@ -205,11 +205,7 @@ async def main_async():
                 eval_prompt, response_model=verdict_model
             )
 
-            evaluation_dict = (
-                verdict_obj
-                if isinstance(verdict_obj, dict)
-                else verdict_obj.model_dump()
-            )
+            evaluation_dict = verdict_obj.model_dump()
 
             return q_id, {
                 "evaluation": evaluation_dict,
@@ -304,7 +300,7 @@ async def main_async():
         )
     else:
         print(
-            f"Accuracy: {summary_metrics['accuracy']}% ({summary_metrics['correct_count']}/{summary_metrics['total_evaluated']} correct)"
+            f"Accuracy: {summary_etrics['accuracy']}% ({summary_metrics['correct_count']}/{summary_metrics['total_evaluated']} correct)"
         )
 
     if modality_info:
