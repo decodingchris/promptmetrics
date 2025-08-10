@@ -167,10 +167,11 @@ async def main_async():
     async def evaluate_item(q_id, gen_data):
         async with semaphore:
             question_data = questions_map[q_id]
+            correct_answer = question_data.get(benchmark.answer_key)
 
             format_map = defaultdict(str)
             format_map.update(question_data)
-            format_map["correct_answer"] = question_data.get("answer")
+            format_map["correct_answer"] = correct_answer
             format_map["model_response"] = gen_data.get("response")
 
             eval_prompt = evaluation_prompt_template.format_map(format_map)
@@ -186,7 +187,7 @@ async def main_async():
             return q_id, {
                 "evaluation": evaluation_dict,
                 "generation_data": gen_data,
-                "correct_answer": question_data["answer"],
+                "correct_answer": correct_answer,
             }
 
     tasks = [

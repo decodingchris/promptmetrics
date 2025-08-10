@@ -22,6 +22,12 @@ class BaseBenchmark(ABC):
 
     @property
     @abstractmethod
+    def answer_key(self) -> str:
+        """The key in the dataset dictionary that holds the correct answer."""
+        pass
+
+    @property
+    @abstractmethod
     def official_generation_prompt_name(self) -> str | None:
         """The filename stem of the official generation prompt, if one exists."""
         pass

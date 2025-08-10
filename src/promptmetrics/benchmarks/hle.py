@@ -32,6 +32,10 @@ class HLEBenchmark(BaseBenchmark):
         return self._name
 
     @property
+    def answer_key(self) -> str:
+        return "answer"
+
+    @property
     def official_generation_prompt_name(self) -> str | None:
         return "official_generation_v1"
 
