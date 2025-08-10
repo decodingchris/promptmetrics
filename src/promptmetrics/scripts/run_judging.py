@@ -3,10 +3,12 @@ import json
 import os
 import asyncio
 import datetime
+import math
+import numpy as np
 from pathlib import Path
 from tqdm.asyncio import tqdm_asyncio
-from pydantic import BaseModel
-from typing import Tuple, Dict, Any
+from pydantic import BaseModel, Field
+from typing import Tuple, Dict, Any, Literal
 
 from promptmetrics.benchmarks.hle import HLEBenchmark
 from promptmetrics.llm_providers.openrouter import OpenRouterLLM
@@ -16,6 +18,12 @@ class JudgeVerdict(BaseModel):
     is_correct: bool | None
     extracted_answer: str | None
     reasoning: str
+
+class OfficialHLEVerdict(BaseModel):
+    extracted_final_answer: str | None
+    reasoning: str
+    correct: Literal["yes", "no"]
+    confidence: int = Field(ge=0, le=100)
 
 def get_benchmark_instance(name: str):
     if name.lower() == "hle":
@@ -41,11 +49,28 @@ def load_judge_prompt_template(prompt_source: str, benchmark_name: str) -> Tuple
         f"Judge prompt '{prompt_source}' not found as a file or in any of the judging search paths."
     )
 
+def calculate_ece(confidence: np.ndarray, correct: np.ndarray, n_bins=10) -> float:
+    """Calculates Expected Calibration Error (ECE)."""
+    if len(confidence) == 0:
+        return 0.0
+    bin_boundaries = np.linspace(0, 1, n_bins + 1)
+    bin_lowers = bin_boundaries[:-1]
+    bin_uppers = bin_boundaries[1:]
+    ece = 0.0
+    for bin_lower, bin_upper in zip(bin_lowers, bin_uppers):
+        in_bin = (confidence > bin_lower) & (confidence <= bin_upper)
+        prop_in_bin = np.mean(in_bin)
+        if prop_in_bin > 0:
+            accuracy_in_bin = np.mean(correct[in_bin])
+            avg_confidence_in_bin = np.mean(confidence[in_bin])
+            ece += np.abs(avg_confidence_in_bin - accuracy_in_bin) * prop_in_bin
+    return ece
+
 async def main_async():
     parser = argparse.ArgumentParser(description="Judge model responses and save a complete artifact with summary metrics.")
     parser.add_argument("--input_file", required=True, type=Path, help="Path to the timestamped predictions.json file.")
     parser.add_argument("--judge_model", default="mistralai/mistral-small-3.2-24b-instruct:free", help="LLM to use as the judge.")
-    parser.add_argument("--judge_prompt_source", default="judge_v1", help="Name of a built-in judge prompt or path to a custom one.")
+    parser.add_argument("--judge_prompt_source", default="official_judge_v1", help="Name of a built-in judge prompt or path to a custom one.")
     parser.add_argument("--num_workers", type=int, default=10, help="Number of concurrent judging requests.")
     args = parser.parse_args()
 
@@ -56,6 +81,7 @@ async def main_async():
         data = json.load(f)
     generation_metadata = data['metadata']
     predictions = data['predictions']
+    was_mismatched = generation_metadata.get("is_mismatched_run", False)
 
     benchmark = get_benchmark_instance(generation_metadata['benchmark'])
     timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -68,11 +94,19 @@ async def main_async():
     judge_prompt_template, judge_prompt_path, judge_prompt_type = load_judge_prompt_template(args.judge_prompt_source, benchmark.name)
     questions_map = {q['id']: q for q in benchmark.load_data()}
 
+    judge_prompt_name = Path(args.judge_prompt_source).stem
+    if judge_prompt_name == "official_judge_v1":
+        verdict_model = OfficialHLEVerdict
+        is_official_judge = True
+        print("Using Official HLE Judge prompt and metrics.")
+    else:
+        verdict_model = JudgeVerdict
+        is_official_judge = False
+
     judged_dir = args.input_file.parent.parent / "judged"
     judged_dir.mkdir(parents=True, exist_ok=True)
     
     sanitized_judge_model = args.judge_model.replace("/", "_").replace(":", "-")
-    judge_prompt_name = Path(args.judge_prompt_source).stem
     judged_filename = f"{timestamp}_judged_by_{sanitized_judge_model}_with_{judge_prompt_name}.json"
     judged_filepath = judged_dir / judged_filename
     
@@ -90,7 +124,7 @@ async def main_async():
                 correct_answer=question_data['answer'],
                 model_response=pred_data['response']
             )
-            verdict_obj = await judge_llm.generate_structured(judge_prompt, response_model=JudgeVerdict)
+            verdict_obj = await judge_llm.generate_structured(judge_prompt, response_model=verdict_model)
             
             judgement_dict = verdict_obj if isinstance(verdict_obj, dict) else verdict_obj.model_dump()
 
@@ -107,15 +141,38 @@ async def main_async():
         if q_id:
             verdicts[q_id] = judged_data
 
-    correct_count = sum(1 for res in verdicts.values() if res.get('judgement', {}).get('is_correct') is True)
-    total_judged = len(verdicts)
-    accuracy = (correct_count / total_judged) * 100 if total_judged > 0 else 0
+    correct_flags = []
+    confidences = []
+    for res in verdicts.values():
+        judgement = res.get('judgement', {})
+        if is_official_judge:
+            is_correct = judgement.get('correct') == 'yes'
+            confidences.append(judgement.get('confidence', 100))
+        else:
+            is_correct = judgement.get('is_correct') is True
+        
+        if is_correct is not None:
+             correct_flags.append(is_correct)
 
+    total_judged = len(correct_flags)
+    correct_count = sum(correct_flags)
+    accuracy = (correct_count / total_judged) * 100 if total_judged > 0 else 0
+    
     summary_metrics = {
         "accuracy": round(accuracy, 2),
         "correct_count": correct_count,
         "total_judged": total_judged,
     }
+
+    if is_official_judge and total_judged > 0:
+        p_hat = accuracy / 100.0
+        ci_half_width = 1.96 * math.sqrt((p_hat * (1 - p_hat)) / total_judged)
+        summary_metrics["accuracy_ci_95"] = round(ci_half_width * 100, 2)
+        
+        conf_array = np.array(confidences) / 100.0
+        correct_array = np.array(correct_flags)
+        ece = calculate_ece(conf_array, correct_array)
+        summary_metrics["expected_calibration_error"] = round(ece * 100, 2)
 
     final_judged_data = {
         "metadata": {
@@ -139,7 +196,18 @@ async def main_async():
     print(f"Model: {generation_metadata['model']}")
     print(f"Prompt Source: {generation_metadata['prompt_source']}")
     print(f"Judged By: {args.judge_model} (with prompt '{args.judge_prompt_source}')")
-    print(f"Accuracy: {summary_metrics['accuracy']}% ({summary_metrics['correct_count']}/{summary_metrics['total_judged']} correct)")
+    
+    if is_official_judge and total_judged > 0:
+        print(f"Accuracy: {summary_metrics['accuracy']}% +/- {summary_metrics['accuracy_ci_95']}% (CI 95%)")
+        print(f"Correct: {summary_metrics['correct_count']} / {summary_metrics['total_judged']}")
+        print(f"Expected Calibration Error (ECE): {summary_metrics['expected_calibration_error']}%")
+    else:
+        print(f"Accuracy: {summary_metrics['accuracy']}% ({summary_metrics['correct_count']}/{summary_metrics['total_judged']} correct)")
+    
+    if was_mismatched:
+        print("\n⚠️  NOTE: This score was generated from a text-only run on a multi-modal benchmark.")
+        print("   The results may not be directly comparable to standard, multi-modal evaluations.")
+
 
 def main():
     asyncio.run(main_async())

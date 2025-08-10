@@ -1,3 +1,5 @@
+---[USER]---
+Please think step-by-step to arrive at the correct answer for the following question.
 State your final answer clearly.
 
 ---

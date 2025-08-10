@@ -5,7 +5,7 @@ import asyncio
 import datetime
 from pathlib import Path
 from tqdm.asyncio import tqdm_asyncio
-from typing import Tuple
+from typing import Tuple, List, Dict, Any
 
 from promptmetrics.benchmarks.hle import HLEBenchmark
 from promptmetrics.llm_providers.openrouter import OpenRouterLLM
@@ -35,6 +35,24 @@ def load_prompt_template(prompt_source: str, benchmark_name: str) -> Tuple[str, 
         f"Prompt '{prompt_source}' not found as a file or in public/private generation directories."
     )
 
+def adapt_messages_for_text_only(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Strips images from messages and adds a note, for text-only models."""
+    text_only_messages = []
+    for msg in messages:
+        if not isinstance(msg.get("content"), list):
+            text_only_messages.append(msg)
+            continue
+        
+        new_content_parts = [part["text"] for part in msg["content"] if part.get("type") == "text"]
+        full_text = "\n".join(new_content_parts)
+        
+        has_image = any(part.get("type") == "image_url" for part in msg["content"])
+        if has_image:
+            full_text += "\n\n[NOTE: An image was part of this question but has been omitted as the current model does not support image input.]"
+        
+        text_only_messages.append({"role": msg["role"], "content": full_text})
+    return text_only_messages
+
 async def main_async():
     parser = argparse.ArgumentParser(description="Generate model responses for an evaluation.")
     parser.add_argument("--model", required=True, help="OpenRouter model name.")
@@ -47,8 +65,24 @@ async def main_async():
     args = parser.parse_args()
 
     benchmark = get_benchmark_instance(args.benchmark)
-    prompt_template, resolved_prompt_path, source_type = load_prompt_template(args.prompt_source, benchmark.name)
+    llm = OpenRouterLLM(model_name=args.model)
 
+    is_mismatched_run = False 
+    
+    if benchmark.is_multimodal and not llm.supports_vision:
+        is_mismatched_run = True
+        print("\n--- ⚠️  Warning: Modality Mismatch ---\n"
+              f"Benchmark '{args.benchmark}' is multi-modal (contains images).\n"
+              f"Model '{args.model}' does not support image input.\n\n"
+              "Images will be omitted from the prompts. This may significantly affect the model's performance "
+              "and the validity of the benchmark score.\n")
+        
+        confirm = input("Do you want to continue with this text-only evaluation? (y/N): ").lower().strip()
+        if confirm not in ['y', 'yes']:
+            print("Evaluation cancelled.")
+            return
+
+    prompt_template, resolved_prompt_path, source_type = load_prompt_template(args.prompt_source, benchmark.name)
     prompt_name = Path(args.prompt_source).stem
     if source_type == "public":
         experiment_name = f"public-{prompt_name}"
@@ -63,8 +97,6 @@ async def main_async():
     log_dir = Path(f"logs/{benchmark.name}/{sanitized_model_name}/{experiment_name}/generation")
     setup_logger(log_dir, f"{timestamp}_generation.log")
 
-    llm = OpenRouterLLM(model_name=args.model)
-    
     output_dir = Path(f"results/{benchmark.name}/{sanitized_model_name}/{experiment_name}/predictions")
     output_dir.mkdir(parents=True, exist_ok=True)
     predictions_filepath = output_dir / f"{timestamp}_predictions.json"
@@ -76,8 +108,12 @@ async def main_async():
     
     async def generate_item(question):
         async with semaphore:
-            final_prompt = benchmark.format_prompt(question, prompt_template)
-            response_data = await llm.generate(final_prompt, temperature=args.temperature, max_tokens=args.max_tokens)
+            messages = benchmark.format_prompt_messages(question, prompt_template)
+            
+            if is_mismatched_run:
+                messages = adapt_messages_for_text_only(messages)
+
+            response_data = await llm.generate(messages, temperature=args.temperature, max_tokens=args.max_tokens)
             prediction = {
                 "response": response_data.get("content"),
                 "reasoning": response_data.get("reasoning"),
@@ -85,7 +121,7 @@ async def main_async():
             return question['id'], prediction
 
     tasks = [generate_item(question) for question in questions]
-    print(f"Generating {len(tasks)} responses with {args.num_workers} concurrent workers...")
+    print(f"\nGenerating {len(tasks)} responses with {args.num_workers} concurrent workers...")
     results = await tqdm_asyncio.gather(*tasks)
     for q_id, prediction_data in results:
         if q_id:
@@ -101,6 +137,7 @@ async def main_async():
             "temperature": args.temperature,
             "max_tokens": args.max_tokens,
             "generated_at_utc": timestamp,
+            "is_mismatched_run": is_mismatched_run,
         },
         "predictions": predictions
     }

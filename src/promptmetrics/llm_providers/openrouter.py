@@ -1,6 +1,9 @@
 import os
 import logging
 import json
+import time
+from pathlib import Path
+import httpx
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -12,8 +15,41 @@ logger = logging.getLogger("promptmetrics.llm_providers.openrouter")
 T = Type[BaseModel]
 StructuredResponse = Union[BaseModel, dict]
 
+def get_model_details():
+    """Fetches model details from OpenRouter, with local caching."""
+    cache_dir = Path.home() / ".cache" / "promptmetrics"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_file = cache_dir / "openrouter_models.json"
+    
+    if cache_file.exists():
+        try:
+            cache_data = json.loads(cache_file.read_text())
+            if time.time() - cache_data.get("timestamp", 0) < 86400:
+                return cache_data.get("models", {})
+        except json.JSONDecodeError:
+            logger.warning("Could not decode model cache. Refetching.")
+
+    try:
+        response = httpx.get("https://openrouter.ai/api/v1/models")
+        response.raise_for_status()
+        models_data = response.json().get("data", [])
+        models_map = {model["id"]: model for model in models_data}
+        
+        cache_payload = {
+            "timestamp": time.time(),
+            "models": models_map
+        }
+        cache_file.write_text(json.dumps(cache_payload, indent=2))
+        return models_map
+    except (httpx.RequestError, json.JSONDecodeError) as e:
+        logger.error(f"Failed to fetch/cache model details from OpenRouter: {e}")
+        return {}
+
+
 class OpenRouterLLM:
     """An asynchronous client for all OpenRouter API interactions."""
+
+    MODELS_CACHE = get_model_details()
 
     def __init__(self, model_name: str):
         self.model_name = model_name
@@ -32,19 +68,26 @@ class OpenRouterLLM:
             "X-Title": os.getenv("YOUR_APP_NAME", "PromptMetrics"),
         }
 
-    async def generate(self, prompt: str, temperature: float = 0.0, max_tokens: int = 8192) -> dict:
+        model_info = self.MODELS_CACHE.get(model_name)
+        self.supports_vision = False
+        if model_info:
+            input_modalities = model_info.get("architecture", {}).get("input_modalities", [])
+            if "image" in input_modalities:
+                 self.supports_vision = True
+
+    async def generate(self, messages: list, temperature: float = 0.0, max_tokens: int = 8192) -> dict:
         log_payload = {
             "model": self.model_name,
-            "prompt": prompt,
+            "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens
         }
-        logger.info(json.dumps({"event": "generate_request", "payload": log_payload}))
+        logger.info(json.dumps({"event": "generate_request", "payload": log_payload}, default=str))
         
         try:
             response = await self.client.chat.completions.create(
                 model=self.model_name,
-                messages=[{"role": "user", "content": prompt}],
+                messages=messages,
                 max_tokens=max_tokens,
                 temperature=temperature,
                 extra_headers=self.headers,
