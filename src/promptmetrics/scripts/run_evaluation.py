@@ -8,6 +8,7 @@ from pathlib import Path
 from tqdm.asyncio import tqdm_asyncio
 from pydantic import BaseModel
 from typing import Tuple, Dict, Any
+from collections import defaultdict
 
 from promptmetrics.registry import get_benchmark_instance
 from promptmetrics.llm_providers.openrouter import OpenRouterLLM
@@ -193,13 +194,12 @@ async def main_async():
         async with semaphore:
             question_data = questions_map[q_id]
 
-            format_dict = {
-                **question_data,
-                "correct_answer": question_data.get("answer"),
-                "model_response": gen_data.get("response"),
-            }
+            format_map = defaultdict(str)
+            format_map.update(question_data)
+            format_map["correct_answer"] = question_data.get("answer")
+            format_map["model_response"] = gen_data.get("response")
 
-            eval_prompt = evaluation_prompt_template.format(**format_dict)
+            eval_prompt = evaluation_prompt_template.format_map(format_map)
 
             verdict_obj = await evaluator_llm.generate_structured(
                 eval_prompt, response_model=verdict_model
@@ -300,7 +300,7 @@ async def main_async():
         )
     else:
         print(
-            f"Accuracy: {summary_etrics['accuracy']}% ({summary_metrics['correct_count']}/{summary_metrics['total_evaluated']} correct)"
+            f"Accuracy: {summary_metrics['accuracy']}% ({summary_metrics['correct_count']}/{summary_metrics['total_evaluated']} correct)"
         )
 
     if modality_info:
