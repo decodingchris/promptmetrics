@@ -1,14 +1,17 @@
 import pytest
 from promptmetrics.benchmarks.hle import HLEBenchmark
 
+
 @pytest.fixture
 def hle_bench():
     """Provides a HLEBenchmark instance for tests."""
     return HLEBenchmark()
 
+
 def test_hle_is_multimodal(hle_bench):
     """Tests that the HLE benchmark correctly identifies as multi-modal."""
     assert hle_bench.is_multimodal is True
+
 
 def test_hle_system_and_user_prompt_parsing(hle_bench):
     """
@@ -21,19 +24,20 @@ def test_hle_system_and_user_prompt_parsing(hle_bench):
     ---[USER]---
     User instruction with {question}.
     """
-    
+
     expected_output = [
         {"role": "system", "content": "System instruction here."},
         {
             "role": "user",
             "content": [
                 {"type": "text", "text": "User instruction with Test Question."}
-            ]
-        }
+            ],
+        },
     ]
-    
+
     formatted_messages = hle_bench.format_prompt_messages(question_data, template)
     assert formatted_messages == expected_output
+
 
 def test_hle_user_only_prompt_parsing(hle_bench):
     """
@@ -44,18 +48,17 @@ def test_hle_user_only_prompt_parsing(hle_bench):
     ---[USER]---
     The question is: {question}
     """
-    
+
     expected_output = [
         {
             "role": "user",
-            "content": [
-                {"type": "text", "text": "The question is: Another Test"}
-            ]
+            "content": [{"type": "text", "text": "The question is: Another Test"}],
         }
     ]
 
     formatted_messages = hle_bench.format_prompt_messages(question_data, template)
     assert formatted_messages == expected_output
+
 
 def test_hle_legacy_prompt_format(hle_bench):
     """
@@ -63,15 +66,18 @@ def test_hle_legacy_prompt_format(hle_bench):
     """
     question_data = {"question": "Legacy Question"}
     template = "This is a simple prompt about a {question}."
-    
+
     expected_output = [
         {
             "role": "user",
             "content": [
-                {"type": "text", "text": "This is a simple prompt about a Legacy Question."}
-            ]
+                {
+                    "type": "text",
+                    "text": "This is a simple prompt about a Legacy Question.",
+                }
+            ],
         }
     ]
-    
+
     formatted_messages = hle_bench.format_prompt_messages(question_data, template)
     assert formatted_messages == expected_output

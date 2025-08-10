@@ -3,6 +3,7 @@ from typing import Dict, Any, List, Union
 
 MessageContentType = Union[str, List[Dict[str, Any]]]
 
+
 class BaseBenchmark(ABC):
     """
     Abstract base class for all benchmarks.
@@ -32,7 +33,9 @@ class BaseBenchmark(ABC):
         pass
 
     @abstractmethod
-    def format_prompt_messages(self, question: Dict[str, Any], prompt_template: str) -> List[Dict[str, MessageContentType]]:
+    def format_prompt_messages(
+        self, question: Dict[str, Any], prompt_template: str
+    ) -> List[Dict[str, MessageContentType]]:
         """
         Formats a single question into a list of messages for an LLM.
 

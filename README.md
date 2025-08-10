@@ -64,27 +64,26 @@ The evaluation process is a simple two-step pipeline. All commands are run with 
 
 This step runs your chosen prompt and model against a benchmark, saving the raw responses into a timestamped, self-contained JSON file.
 
-**For Multi-Modal Benchmarks:** `PromptMetrics` automatically checks if your chosen model supports vision. If not, it will warn you and ask for confirmation before proceeding with a text-only run.
-
 ```bash
 # Example running the multi-modal HLE benchmark with a vision model
 uv run pm-generate \
   --model "openai/gpt-4o" \
   --benchmark "hle" \
-  --prompt_source "chain_of_thought" \
+  --generation_prompt_source "chain_of_thought" \
   --max_samples 3
 ```
 The script will print the full path to the generated artifact, which you will use in the next step.
 
 ### Step 2: Evaluate the Generations
 
-This step takes the generated artifact and uses a powerful "evaluator" LLM to grade each response.
+This step takes the generated artifact and uses a powerful "evaluator" LLM to grade each response. The `--evaluation_prompt_source` argument is required.
 
 ```bash
 # Paste the full path from the previous command as the --input_file
 uv run pm-evaluate \
   --input_file "results/hle/openai_gpt-4o/.../generations/20250810..._generations.json" \
-  --evaluator_model "openai/gpt-4o"
+  --evaluator_model "openai/gpt-4o" \
+  --evaluation_prompt_source "official_evaluation_v1"
 ```
 This command will:
 1.  Read the generations file.
@@ -95,60 +94,59 @@ This command will:
 ```
 --- Final Score ---
 Model: openai/gpt-4o
-Prompt Source: chain_of_thought
-Evaluated By: openai/gpt-4o (with prompt 'evaluation_v1')
+Generation Prompt: chain_of_thought
+Evaluated By: openai/gpt-4o (with prompt 'official_evaluation_v1')
 Accuracy: 66.67% (2/3 correct)
 ```
 
-### Advanced Usage
+## Advanced Usage
 
 #### Writing Custom Prompts (System & User Roles)
 
 For full control over the model's behavior, you can create your own prompt files. `PromptMetrics` uses simple separators to define message roles, giving you maximum flexibility. The `{question}` placeholder is always required in the user message.
 
-**Option 1: System and User Prompts**
-This is the most powerful format for modern chat models.
+**Example: `my_custom_prompt.txt`**
 ```txt
 ---[SYSTEM]---
-You are a helpful assistant specializing in astrophysics. Your answers should be concise and accurate.
+You are a helpful assistant specializing in astrophysics.
 
 ---[USER]---
-Please answer the following question.
-Question: {question}
+Please answer the following question: {question}
+```
+You can use any custom prompt by providing the file path to the `--generation_prompt_source` argument.
+
+#### Running on Full Benchmarks (Safety First)
+
+To prevent accidental, large, and costly API jobs, `PromptMetrics` includes a safety check. If you run `pm-generate` without `--max_samples` or `pm-evaluate` on a large file, it will display a warning and ask for confirmation.
+
+```
+--- ⚠️  Warning: Full Benchmark Run ---
+You have not specified --max_samples. This will run generation on the entire 'hle' benchmark.
+
+This will result in approximately 2500 API calls to the model 'openai/gpt-4o'.
+This may lead to significant API costs and could take a long time to complete.
+
+Are you sure you want to continue? (y/N):
 ```
 
-**Option 2: User Prompt Only**
-If you only need a user prompt, simply use the `---[USER]---` separator.
-```txt
----[USER]---
-State your final answer clearly.
+For automated scripts (e.g., in a CI/CD pipeline) or for expert users who want to bypass this check, use the `--allow-full-run` flag.
 
----
-Question:
-{question}
----
-
-Answer:
+```bash
+# This will run the full benchmark without asking for confirmation
+uv run pm-generate --benchmark "hle" ... --allow-full-run
 ```
-
-**Option 3: Legacy Format (Backward Compatibility)**
-If no separators are found, the entire file is treated as a single user message.
-```txt
-This is a simple prompt about a {question}.
-```
-You can use any of these custom prompt formats by providing the file path to the `--prompt_source` argument.
 
 #### Replicating Official Benchmarks
 
 `PromptMetrics` allows for high-fidelity replication of official benchmarks by using their specific prompts and evaluation criteria.
 
-**1. Use Official Prompts:** Built-in official prompts can be selected via `--prompt_source` and `--evaluation_prompt_source`. For example, to run the official HLE generation and evaluation workflow:
+**1. Use Official Prompts:** Built-in official prompts can be selected via `--generation_prompt_source` and `--evaluation_prompt_source`. For example, to run the official HLE workflow:
 ```bash
 # Generate using the official HLE system/user prompt format
 uv run pm-generate \
   --model "openai/gpt-4o" \
   --benchmark "hle" \
-  --prompt_source "official_v1" \
+  --generation_prompt_source "official_generation_v1" \
   --max_samples 3
 
 # Evaluate using the official HLE evaluation prompt for advanced metrics
@@ -162,7 +160,7 @@ uv run pm-evaluate \
 ```
 --- Final Score ---
 Model: openai/gpt-4o
-Prompt Source: official_v1
+Generation Prompt: official_generation_v1
 Evaluated By: openai/gpt-4o (with prompt 'official_evaluation_v1')
 Accuracy: 66.67% +/- 38.49% (CI 95%)
 Correct: 2 / 3
@@ -178,7 +176,7 @@ Each experiment folder contains two subdirectories:
 -   `generations/`: Contains the raw, timestamped output from the model being tested.
 -   `evaluations/`: Contains one or more timestamped, evaluated artifacts, each corresponding to a specific evaluator model and evaluation prompt.
 
-The final `evaluations_...json` file is a complete record, containing all metadata, summary metrics, and the detailed evaluations for each question.
+The final `evaluations_...json` file is a complete record. Its `metadata` section is nested to clearly separate the parameters of the generation and evaluation steps, ensuring perfect auditability.
 
 ## For Developers
 
