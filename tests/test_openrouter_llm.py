@@ -14,7 +14,6 @@ from promptmetrics.benchmarks.hle import OfficialHLEEvaluation
 
 def test_get_model_details_caches_and_reads(monkeypatch, tmp_path):
     # Redirect cache directory to tmp
-    monkeypatch.setattr(orouter, "Path", orouter.Path)  # ensure correct binding
     monkeypatch.setattr(orouter.Path, "home", lambda: tmp_path)
     # First call, simulate network response
     class Resp:
@@ -31,6 +30,47 @@ def test_get_model_details_caches_and_reads(monkeypatch, tmp_path):
     assert cache_file.exists()
     data = json.loads(cache_file.read_text())
     assert "timestamp" in data
+
+
+def test_get_model_details_request_error_returns_empty(monkeypatch, tmp_path):
+    # Ensure a RequestError path returns {}
+    monkeypatch.setattr(orouter.Path, "home", lambda: tmp_path)
+
+    class RequestError(Exception):
+        pass
+
+    class FakeHttpx:
+        @staticmethod
+        def get(url):
+            raise RequestError("network down")
+    # Attach the exception type after class definition (class body can't see test locals)
+    FakeHttpx.RequestError = RequestError
+
+    monkeypatch.setattr(orouter, "httpx", FakeHttpx)
+    models = orouter.get_model_details()
+    assert models == {}
+
+
+def test_get_model_details_corrupt_cache_refetches_and_overwrites(monkeypatch, tmp_path):
+    # Write corrupt cache then ensure function refetches and overwrites with valid JSON
+    monkeypatch.setattr(orouter.Path, "home", lambda: tmp_path)
+    cache_dir = tmp_path / ".cache" / "promptmetrics"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    cache_file = cache_dir / "openrouter_models.json"
+    cache_file.write_text("{not-json", encoding="utf-8")
+
+    class Resp:
+        def raise_for_status(self): pass
+        def json(self):
+            return {"data": [{"id": "m2", "architecture": {"input_modalities": ["image", "text"]}, "supported_parameters": ["reasoning"]}]}
+    monkeypatch.setattr(orouter, "httpx", types.SimpleNamespace(get=lambda url: Resp()))
+
+    models = orouter.get_model_details()
+    assert "m2" in models
+    # Cache should now be valid JSON
+    data = json.loads(cache_file.read_text())
+    assert "timestamp" in data and "models" in data
+    assert "m2" in data["models"]
 
 
 def test_openrouterllm_supports_vision_and_reasoning(monkeypatch):

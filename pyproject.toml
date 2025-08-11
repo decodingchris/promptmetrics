@@ -33,3 +33,12 @@ dev = [
 
 [tool.uv]
 package = true
+
+[tool.coverage.run]
+source = ["src/promptmetrics"]
+omit = [
+    # Exclude the abstract base class, which is not directly testable
+    "src/promptmetrics/benchmarks/base.py",
+    # Exclude the empty __init__.py file
+    "src/promptmetrics/__init__.py",
+]

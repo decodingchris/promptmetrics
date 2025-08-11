@@ -110,3 +110,33 @@ async def test_pm_generate_text_only_fallback_when_model_no_vision(tmp_output_di
     data = json.loads(files[0].read_text(encoding="utf-8"))
     assert "modality_handling" in data["metadata"]["generation"]
     assert data["metadata"]["generation"]["modality_handling"]["status"] == "text_only_fallback"
+
+
+@pytest.mark.asyncio
+async def test_pm_generate_full_run_decline(tmp_output_dir, monkeypatch):
+    # Decline full benchmark run -> should exit without creating results
+    monkeypatch.setattr(rg, "get_benchmark_instance", lambda name: HLEBenchmark())
+    monkeypatch.setattr(HLEBenchmark, "get_size", lambda self: 5)
+    # Decline prompt
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "n")
+
+    def fake_parse_args():
+        class A:
+            pass
+        a = A()
+        a.model = "openai/gpt-4o"
+        a.benchmark = "hle"
+        a.generation_prompt_source = "official"
+        a.output_dir = Path(tmp_output_dir)
+        a.temperature = 0.0
+        a.max_tokens = 128
+        a.max_samples = None   # triggers full run confirmation
+        a.num_workers = 1
+        a.allow_full_run = False
+        return a
+
+    monkeypatch.setattr(rg.argparse.ArgumentParser, "parse_args", lambda self: fake_parse_args())
+
+    await rg.main_async()
+    # Should not create any results directory
+    assert not (tmp_output_dir / "results").exists()
