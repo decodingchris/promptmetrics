@@ -4,7 +4,7 @@ A modular toolkit for the rigorous evaluation and metric generation of LLM promp
 
 ---
 
-`PromptMetrics` is a professional-grade Python toolkit for the rigorous evaluation of Large Language Model (LLM) prompts. It provides a flexible, reproducible, and cost-effective framework for measuring prompt performance against academic benchmarks like [Humanity's Last Exam (HLE)](https://huggingface.co/datasets/cais/hle), including **full support for multi-modal (vision) questions**.
+`PromptMetrics` is a professional-grade Python toolkit for the rigorous evaluation of Large Language Model (LLM) prompts. It provides a flexible, reproducible, and cost-effective framework for measuring prompt performance against academic benchmarks like **[GPQA](https://huggingface.co/datasets/idavidrein/gpqa)** and **[Humanity's Last Exam (HLE)](https://huggingface.co/datasets/cais/hle)**, including full support for multi-modal (vision) questions where applicable.
 
 This tool is designed for serious prompt engineering research. It allows you to:
 -   **Test any prompt** against standardized, version-controlled datasets, including vision benchmarks.
@@ -65,13 +65,22 @@ The evaluation process is a simple two-step pipeline. All commands are run with 
 
 This step runs your chosen prompt and model against a benchmark, saving the raw responses into a timestamped, self-contained JSON file.
 
+**Example 1: Running the multi-modal HLE benchmark with a vision model**
 ```bash
-# Example running the multi-modal HLE benchmark with a vision model
 uv run pm-generate \
   --model "openai/gpt-4o" \
   --benchmark "hle" \
   --generation_prompt_source "official_generation_v1" \
   --max_samples 3
+```
+
+**Example 2: Running the text-only GPQA benchmark**
+```bash
+uv run pm-generate \
+  --model "google/gemini-pro" \
+  --benchmark "gpqa_diamond" \
+  --generation_prompt_source "official_generation_zeroshot_v1" \
+  --max_samples 5
 ```
 By default, this saves outputs to `results/` and `logs/` subdirectories in your current location. You can redirect this using the `--output_dir` flag (e.g., `--output_dir ./my-experiments`).
 
@@ -143,16 +152,13 @@ uv run pm-generate --benchmark "hle" ... --allow-full-run
 
 #### Replicating Official Benchmarks
 
-`PromptMetrics` allows for high-fidelity replication of official benchmarks by using their specific prompts and evaluation criteria.
+`PromptMetrics` allows for high-fidelity replication of official benchmarks by using their specific prompts and evaluation criteria. The `--generation_prompt_source "official"` and `--evaluation_prompt_source "official"` flags automatically select the correct prompt for the specified benchmark.
 
-**1. Use Official Prompts:** Built-in official prompts can be selected via `--generation_prompt_source` and `--evaluation_prompt_source`. For example, to run the official HLE workflow:
+**1. Use Official Prompts:** To run the official HLE workflow:
 ```bash
 # Generate using the official HLE system/user prompt format
 uv run pm-generate \
-  --model "openai/gpt-4o" \
-  --benchmark "hle" \
-  --generation_prompt_source "official" \
-  --max_samples 3
+  --benchmark "hle" --model "openai/gpt-4o" --generation_prompt_source "official" --max_samples 3
 
 # Evaluate using the official HLE evaluation prompt for advanced metrics
 uv run pm-evaluate \
@@ -160,8 +166,9 @@ uv run pm-evaluate \
   --evaluation_prompt_source "official"
 ```
 
-**2. Get Advanced Metrics:** When using an official evaluation prompt, the final output will include specialized metrics like **Expected Calibration Error (ECE)**.
+**2. Get Advanced Metrics:** When an evaluation uses the benchmark's specialized Pydantic model for grading, the final output will include advanced metrics like **Expected Calibration Error (ECE)**. This is automatically triggered when using an official evaluation prompt.
 
+**Crucially, this also works for benchmarks like GPQA that do not have an *official* evaluation prompt.** When you use `--evaluation_prompt_source "official"` for GPQA, `PromptMetrics` intelligently falls back to a compatible, high-quality community prompt (`non_official_evaluation_v1.txt`) while still using GPQA's specialized `OfficialGPQAEvaluation` model. This ensures you get advanced metrics even when an official grading prompt isn't published.
 ```
 --- Final Score ---
 Model: openai/gpt-4o
