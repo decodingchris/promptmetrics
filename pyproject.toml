@@ -30,7 +30,7 @@ dev = [
     "pytest-asyncio",
     "ruff",
     "mypy",
-    ""types-tqdm",
+    "types-tqdm",
 ]
 
 [tool.uv]
