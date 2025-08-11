@@ -32,15 +32,12 @@ def test_adapt_messages_for_text_only_variants():
 async def test_pm_generate_creates_artifact(
     tmp_output_dir, monkeypatch, sample_questions
 ):
-    # Patch benchmark to avoid HF dataset calls
     monkeypatch.setattr(rg, "get_benchmark_instance", lambda name: HLEBenchmark())
 
-    # Patch load_data to return our samples
     monkeypatch.setattr(
         HLEBenchmark, "load_data", lambda self, max_samples=None: sample_questions
     )
 
-    # Patch llm to avoid network and mark as vision-capable
     async def fake_generate(messages, temperature, max_tokens):
         return {
             "content": "Explanation: ...\nAnswer: a cat\nConfidence: 95",
@@ -81,7 +78,6 @@ async def test_pm_generate_creates_artifact(
 
     await rg.main_async()
 
-    # Verify file structure and content
     results_dir = (
         tmp_output_dir
         / "results"
@@ -102,7 +98,6 @@ async def test_pm_generate_creates_artifact(
 async def test_pm_generate_text_only_fallback_when_model_no_vision(
     tmp_output_dir, monkeypatch, sample_questions
 ):
-    # benchmark is multimodal; model text-only triggers note and prompt to continue
     monkeypatch.setattr(rg, "get_benchmark_instance", lambda name: HLEBenchmark())
     monkeypatch.setattr(
         HLEBenchmark, "load_data", lambda self, max_samples=None: sample_questions
@@ -164,10 +159,19 @@ async def test_pm_generate_text_only_fallback_when_model_no_vision(
 
 @pytest.mark.asyncio
 async def test_pm_generate_full_run_decline(tmp_output_dir, monkeypatch):
-    # Decline full benchmark run -> should exit without creating results
-    monkeypatch.setattr(rg, "get_benchmark_instance", lambda name: HLEBenchmark())
-    monkeypatch.setattr(HLEBenchmark, "get_size", lambda self: 5)
-    # Decline prompt
+    b = HLEBenchmark()
+    monkeypatch.setattr(rg, "get_benchmark_instance", lambda name: b)
+
+    fake_infos = {
+        b.dataset_config: types.SimpleNamespace(
+            splits={b.dataset_split: types.SimpleNamespace(num_examples=123)}
+        )
+    }
+    monkeypatch.setattr(
+        "promptmetrics.benchmarks.hle.get_dataset_infos",
+        lambda *a, **k: fake_infos,
+    )
+
     monkeypatch.setattr("builtins.input", lambda *a, **k: "n")
 
     def fake_parse_args():
@@ -181,7 +185,7 @@ async def test_pm_generate_full_run_decline(tmp_output_dir, monkeypatch):
         a.output_dir = Path(tmp_output_dir)
         a.temperature = 0.0
         a.max_tokens = 128
-        a.max_samples = None  # triggers full run confirmation
+        a.max_samples = None
         a.num_workers = 1
         a.allow_full_run = False
         return a
@@ -191,5 +195,70 @@ async def test_pm_generate_full_run_decline(tmp_output_dir, monkeypatch):
     )
 
     await rg.main_async()
-    # Should not create any results directory
     assert not (tmp_output_dir / "results").exists()
+
+
+@pytest.mark.asyncio
+async def test_pm_generate_full_run_accepts(monkeypatch, tmp_output_dir):
+    b = HLEBenchmark()
+    monkeypatch.setattr(rg, "get_benchmark_instance", lambda name: b)
+
+    fake_infos = {
+        b.dataset_config: types.SimpleNamespace(
+            splits={b.dataset_split: types.SimpleNamespace(num_examples=123)}
+        )
+    }
+    monkeypatch.setattr(
+        "promptmetrics.benchmarks.hle.get_dataset_infos",
+        lambda *a, **k: fake_infos,
+    )
+
+    monkeypatch.setattr(
+        HLEBenchmark,
+        "load_data",
+        lambda self, max_samples=None: [{"id": "q", "question": "?", "answer": "a"}],
+    )
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "y")
+
+    async def fake_generate(messages, temperature, max_tokens):
+        return {"content": "Answer: a\nConfidence: 100", "reasoning": None}
+
+    llm = types.SimpleNamespace(
+        supports_vision=True, supports_reasoning=True, generate=fake_generate
+    )
+    monkeypatch.setattr(rg, "OpenRouterLLM", lambda model_name: llm)
+
+    def args():
+        class A:
+            pass
+
+        a = A()
+        a.model = "m"
+        a.benchmark = "hle"
+        a.generation_prompt_source = "official"
+        a.output_dir = tmp_output_dir
+        a.temperature = 0.0
+        a.max_tokens = 16
+        a.max_samples = None
+        a.num_workers = 1
+        a.allow_full_run = False
+        return a
+
+    monkeypatch.setattr(rg.argparse.ArgumentParser, "parse_args", lambda self: args())
+    monkeypatch.setattr(
+        rg,
+        "tqdm_asyncio",
+        types.SimpleNamespace(gather=lambda *coros: rg.asyncio.gather(*coros)),
+    )
+    await rg.main_async()
+
+    results_dir = (
+        tmp_output_dir
+        / "results"
+        / "hle"
+        / "m"
+        / "public-official_generation_v1"
+        / "generations"
+    )
+    files = list(results_dir.glob("*_generations.json"))
+    assert len(files) == 1

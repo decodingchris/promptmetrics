@@ -1,9 +1,11 @@
 from .benchmarks.base import BaseBenchmark
+from .benchmarks.gpqa import GPQADiamondBenchmark
 from .benchmarks.hle import HLEBenchmark
 
-_BENCHMARK_CLASSES = [
+_BENCHMARK_CLASSES: tuple[type[HLEBenchmark], type[GPQADiamondBenchmark]] = (
     HLEBenchmark,
-]
+    GPQADiamondBenchmark,
+)
 
 BENCHMARK_REGISTRY: dict[str, type[BaseBenchmark]] = {
     cls().name: cls for cls in _BENCHMARK_CLASSES

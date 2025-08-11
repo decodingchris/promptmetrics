@@ -13,11 +13,11 @@ from promptmetrics.benchmarks.hle import HLEBenchmark, OfficialHLEEvaluation
 @pytest.mark.parametrize(
     "conf, corr, expected_ece",
     [
-        ([0.95], [1], 0.05),  # |0.95 - 1.0| in its bin
-        ([0.55], [0], 0.55),  # |0.55 - 0.0|
+        ([0.95], [1], 0.05),
+        ([0.55], [0], 0.55),
         ([0.95, 0.55], [1, 0], 0.30),
-        ([0.85, 0.85], [1, 1], 0.15),  # |0.85 - 1.0|
-        ([0.15, 0.85], [0, 1], 0.15),  # average of |0.15-0| and |0.85-1|
+        ([0.85, 0.85], [1, 1], 0.15),
+        ([0.15, 0.85], [0, 1], 0.15),
     ],
     ids=[
         "single-correct",
@@ -38,7 +38,6 @@ def test_calculate_ece(conf, corr, expected_ece):
 async def test_pm_evaluate_creates_evaluation_artifact(
     tmp_output_dir, generations_sample_artifact, monkeypatch
 ):
-    # configure parser to accept our input file
     def fake_parse_args():
         class A:
             pass
@@ -56,10 +55,8 @@ async def test_pm_evaluate_creates_evaluation_artifact(
         reval.argparse.ArgumentParser, "parse_args", lambda self: fake_parse_args()
     )
 
-    # benchmark and data
     monkeypatch.setattr(reval, "get_benchmark_instance", lambda name: HLEBenchmark())
 
-    # load only the needed ids from the generations artifact
     def fake_load_data(self, max_samples=None, ids_to_load=None):
         q_map = {
             "q1": {
@@ -73,7 +70,6 @@ async def test_pm_evaluate_creates_evaluation_artifact(
 
     monkeypatch.setattr(HLEBenchmark, "load_data", fake_load_data)
 
-    # OpenRouterLLM.generate_structured returning OfficialHLEEvaluation verdicts
     class FakeLLM:
         def __init__(self, model_name):
             self.supports_reasoning = False
@@ -103,7 +99,6 @@ async def test_pm_evaluate_creates_evaluation_artifact(
 
     await reval.main_async()
 
-    # Verify evaluations artifact
     base = Path(generations_sample_artifact).parent.parent
     eval_dir = base / "evaluations"
     files = list(eval_dir.glob("*_evaluations_by_*_with_official_evaluation_v1.json"))
@@ -111,7 +106,6 @@ async def test_pm_evaluate_creates_evaluation_artifact(
     data = json.loads(files[0].read_text(encoding="utf-8"))
     summary = data["summary_metrics"]
 
-    # 1 correct out of 2 = 50% +/- 69.3% and ECE 30.0%
     assert summary["accuracy"] == 50.0
     assert summary["correct_count"] == 1
     assert summary["total_evaluated"] == 2
@@ -123,7 +117,6 @@ async def test_pm_evaluate_creates_evaluation_artifact(
 async def test_pm_evaluate_prompts_for_confirmation_when_not_allowed(
     tmp_output_dir, generations_sample_artifact, monkeypatch
 ):
-    # same as above but do not pass --allow-full-run
     def fake_parse_args():
         class A:
             pass
@@ -140,12 +133,10 @@ async def test_pm_evaluate_prompts_for_confirmation_when_not_allowed(
     monkeypatch.setattr(
         reval.argparse.ArgumentParser, "parse_args", lambda self: fake_parse_args()
     )
-    # Make the prompt decline
     monkeypatch.setattr("builtins.input", lambda *a, **k: "n")
 
     await reval.main_async()
 
-    # Should not create evaluations dir
     base = Path(generations_sample_artifact).parent.parent
     eval_dir = base / "evaluations"
     assert not eval_dir.exists()
@@ -155,7 +146,6 @@ async def test_pm_evaluate_prompts_for_confirmation_when_not_allowed(
 async def test_pm_evaluate_with_non_official_prompt_uses_default_verdict(
     tmp_output_dir, generations_sample_artifact, monkeypatch, tmp_path
 ):
-    # Use a custom evaluation prompt (non-official) -> default EvaluationVerdict path, no ECE fields
     custom_prompt = tmp_path / "custom_eval.txt"
     custom_prompt.write_text(
         "Evaluate informally: {question} :: {model_response} vs {correct_answer}",
@@ -193,13 +183,11 @@ async def test_pm_evaluate_with_non_official_prompt_uses_default_verdict(
 
     monkeypatch.setattr(HLEBenchmark, "load_data", fake_load_data)
 
-    # Default EvaluationVerdict path
     class FakeLLM:
         def __init__(self, model_name):
             self.supports_reasoning = False
 
         async def generate_structured(self, prompt, response_model, max_tokens):
-            # Construct default verdicts (is_correct True for q1, False for q2)
             if "a cat" in prompt:
                 return reval.EvaluationVerdict(
                     is_correct=True, extracted_answer="a cat", reasoning="ok"
@@ -226,7 +214,6 @@ async def test_pm_evaluate_with_non_official_prompt_uses_default_verdict(
     assert summary["accuracy"] == 50.0
     assert summary["correct_count"] == 1
     assert summary["total_evaluated"] == 2
-    # Non-official: no CI or ECE
     assert "accuracy_ci_95" not in summary
     assert "expected_calibration_error" not in summary
 
@@ -235,7 +222,6 @@ async def test_pm_evaluate_with_non_official_prompt_uses_default_verdict(
 async def test_pm_evaluate_with_zero_items_yields_zero_metrics(
     tmp_output_dir, monkeypatch, tmp_path
 ):
-    # Create an empty generations artifact
     artifact_dir = (
         tmp_output_dir
         / "results"
@@ -281,11 +267,9 @@ async def test_pm_evaluate_with_zero_items_yields_zero_metrics(
         reval.argparse.ArgumentParser, "parse_args", lambda self: fake_parse_args()
     )
     monkeypatch.setattr(reval, "get_benchmark_instance", lambda name: HLEBenchmark())
-    # No questions to load
     monkeypatch.setattr(
         HLEBenchmark, "load_data", lambda self, max_samples=None, ids_to_load=None: []
     )
-    # Ensure no real LLM used; it won't be called anyway
     monkeypatch.setattr(
         reval,
         "OpenRouterLLM",
@@ -299,7 +283,6 @@ async def test_pm_evaluate_with_zero_items_yields_zero_metrics(
 
     await reval.main_async()
 
-    # evaluations directory sits alongside generations inside the prompt version folder
     eval_dir = artifact_dir.parent / "evaluations"
     files = list(eval_dir.glob("*_evaluations_by_*_with_official_evaluation_v1.json"))
     assert len(files) == 1
@@ -308,6 +291,69 @@ async def test_pm_evaluate_with_zero_items_yields_zero_metrics(
     assert summary["accuracy"] == 0
     assert summary["correct_count"] == 0
     assert summary["total_evaluated"] == 0
-    # No CI/ECE computed for zero items even for official
     assert "accuracy_ci_95" not in summary
     assert "expected_calibration_error" not in summary
+
+
+@pytest.mark.asyncio
+async def test_pm_evaluate_full_run_accepts(
+    tmp_output_dir, monkeypatch, generations_sample_artifact
+):
+    from pathlib import Path
+    from promptmetrics.benchmarks.hle import HLEBenchmark
+    import promptmetrics.scripts.run_evaluation as reval
+    import types
+
+    def args():
+        class A:
+            pass
+
+        a = A()
+        a.input_file = Path(generations_sample_artifact)
+        a.evaluator_model = "m"
+        a.evaluation_prompt_source = "official"
+        a.num_workers = 1
+        a.evaluator_max_tokens = 128
+        a.allow_full_run = False
+        return a
+
+    monkeypatch.setattr(
+        reval.argparse.ArgumentParser, "parse_args", lambda self: args()
+    )
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "y")
+    monkeypatch.setattr(reval, "get_benchmark_instance", lambda name: HLEBenchmark())
+
+    monkeypatch.setattr(
+        HLEBenchmark,
+        "load_data",
+        lambda self, ids_to_load=None, max_samples=None: [
+            {"id": qid, "question": f"Q for {qid}", "answer": "a cat"}
+            for qid in (ids_to_load or [])
+        ],
+    )
+
+    class FakeLLM:
+        def __init__(self, model_name):
+            self.supports_reasoning = True
+
+        async def generate_structured(self, prompt, response_model, max_tokens):
+            return response_model(
+                extracted_final_answer="a cat",
+                reasoning="ok",
+                correct="yes",
+                confidence=99,
+            )
+
+    monkeypatch.setattr(reval, "OpenRouterLLM", FakeLLM)
+    monkeypatch.setattr(
+        reval,
+        "tqdm_asyncio",
+        types.SimpleNamespace(gather=lambda *c: reval.asyncio.gather(*c)),
+    )
+
+    await reval.main_async()
+
+    base = Path(generations_sample_artifact).parent.parent
+    eval_dir = base / "evaluations"
+    files = list(eval_dir.glob("*_evaluations_by_*_with_official_evaluation_v1.json"))
+    assert len(files) == 1

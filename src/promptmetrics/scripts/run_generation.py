@@ -1,20 +1,29 @@
 import argparse
-import json
 import asyncio
 import datetime
+import json
+import sys
 from pathlib import Path
-from tqdm.asyncio import tqdm_asyncio
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
-from promptmetrics.registry import get_benchmark_instance
+from tqdm.asyncio import tqdm_asyncio
+
 from promptmetrics.llm_providers.openrouter import OpenRouterLLM
 from promptmetrics.logging_utils import setup_logger
+from promptmetrics.registry import get_benchmark_instance
 from promptmetrics.utils import load_prompt_template
 
 
 def adapt_messages_for_text_only(
     messages: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
+    """
+    Converts multi-modal messages to a text-only format for non-vision models.
+
+    This function processes a list of messages, finds any with multi-part content
+    (like text and images), and collapses them into a single text string. It also
+    appends a clear note indicating that an image was omitted.
+    """
     text_only_messages = []
     for msg in messages:
         if not isinstance(msg.get("content"), list):
@@ -94,12 +103,26 @@ async def main_async():
                 f"Using official generation prompt for '{benchmark.name}': '{generation_prompt_source}'"
             )
         else:
-            raise ValueError(
-                f"The benchmark '{benchmark.name}' does not have an official generation prompt defined."
-            )
+            fallback_prompt_name = "non_official_generation_v1"
+            try:
+                load_prompt_template(fallback_prompt_name, benchmark.name, "generation")
+                print(
+                    f"WARNING: Benchmark '{benchmark.name}' has no official generation prompt. "
+                    f"Falling back to use '{fallback_prompt_name}'."
+                )
+                generation_prompt_source = fallback_prompt_name
+            except FileNotFoundError:
+                raise ValueError(
+                    f"The benchmark '{benchmark.name}' does not have an official generation prompt defined, "
+                    f"and the fallback prompt '{fallback_prompt_name}' could not be found."
+                )
 
     if not args.allow_full_run and args.max_samples is None:
-        total_samples = benchmark.get_size()
+        try:
+            total_samples = benchmark.get_size()
+        except (NotImplementedError, AttributeError):
+            total_samples = len(benchmark.load_data())
+
         print("\n--- ⚠️  Warning: Full Benchmark Run ---")
         print(
             f"You have not specified --max_samples. This will run generation on the entire '{args.benchmark}' benchmark."
@@ -116,7 +139,6 @@ async def main_async():
             return
 
     llm = OpenRouterLLM(model_name=args.model)
-
     modality_handling_info = None
 
     if benchmark.is_multimodal and not llm.supports_vision:
@@ -164,11 +186,11 @@ async def main_async():
     generations_filepath = output_dir / f"{timestamp}_generations.json"
 
     questions = benchmark.load_data(max_samples=args.max_samples)
-    generations = {}
+    generations: Dict[str, Any] = {}
 
     semaphore = asyncio.Semaphore(args.num_workers)
 
-    async def generate_item(question):
+    async def generate_item(question: Dict[str, Any]) -> tuple[str, Dict[str, Any]]:
         async with semaphore:
             messages = benchmark.format_prompt_messages(question, prompt_template)
 
@@ -197,7 +219,7 @@ async def main_async():
         "model": args.model,
         "reasoning_model": llm.supports_reasoning,
         "benchmark": args.benchmark,
-        "prompt_source": args.generation_prompt_source,
+        "prompt_source": generation_prompt_source,
         "prompt_source_type": source_type,
         "prompt_file": str(resolved_prompt_path),
         "temperature": args.temperature,
@@ -220,7 +242,11 @@ async def main_async():
 
 
 def main():
-    asyncio.run(main_async())
+    try:
+        asyncio.run(main_async())
+    except (ValueError, FileNotFoundError) as e:
+        print(f"\nERROR: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

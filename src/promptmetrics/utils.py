@@ -23,11 +23,13 @@ def load_prompt_template(
         path = Path(prompt_source)
         return path.read_text(encoding="utf-8"), path, "external"
 
+    benchmark_base_name = benchmark_name.split("_")[0]
+
     prompt_name_with_ext = f"{prompt_source}.txt"
     private_path = (
         Path("prompts")
         / "private"
-        / benchmark_name
+        / benchmark_base_name
         / prompt_type
         / prompt_name_with_ext
     )
@@ -35,7 +37,11 @@ def load_prompt_template(
         return private_path.read_text(encoding="utf-8"), private_path, "private"
 
     public_path = (
-        Path("prompts") / "public" / benchmark_name / prompt_type / prompt_name_with_ext
+        Path("prompts")
+        / "public"
+        / benchmark_base_name
+        / prompt_type
+        / prompt_name_with_ext
     )
     if public_path.exists():
         return public_path.read_text(encoding="utf-8"), public_path, "public"

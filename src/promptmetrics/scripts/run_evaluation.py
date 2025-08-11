@@ -1,18 +1,20 @@
 import argparse
-import json
 import asyncio
 import datetime
+import json
 import math
-import numpy as np
-from pathlib import Path
-from tqdm.asyncio import tqdm_asyncio
-from pydantic import BaseModel
-from typing import Dict, Any
+import sys
 from collections import defaultdict
+from pathlib import Path
+from typing import Any, Dict
 
-from promptmetrics.registry import get_benchmark_instance
+import numpy as np
+from pydantic import BaseModel
+from tqdm.asyncio import tqdm_asyncio
+
 from promptmetrics.llm_providers.openrouter import OpenRouterLLM
 from promptmetrics.logging_utils import setup_logger
+from promptmetrics.registry import get_benchmark_instance
 from promptmetrics.utils import load_prompt_template
 
 
@@ -118,9 +120,21 @@ async def main_async():
                 f"Using official evaluation prompt for '{benchmark.name}': '{evaluation_prompt_source}'"
             )
         else:
-            raise ValueError(
-                f"The benchmark '{benchmark.name}' does not have an official evaluation prompt defined."
-            )
+            # Official name is None, try the non-official fallback
+            fallback_prompt_name = "non_official_evaluation_v1"
+            try:
+                # Check if the fallback exists by trying to load it
+                load_prompt_template(fallback_prompt_name, benchmark.name, "evaluation")
+                print(
+                    f"WARNING: Benchmark '{benchmark.name}' has no official evaluation prompt. "
+                    f"Falling back to use '{fallback_prompt_name}'."
+                )
+                evaluation_prompt_source = fallback_prompt_name
+            except FileNotFoundError:
+                raise ValueError(
+                    f"The benchmark '{benchmark.name}' does not have an official evaluation prompt defined, "
+                    f"and the fallback prompt '{fallback_prompt_name}' could not be found."
+                )
 
     log_base_str = str(args.input_file.parent.parent).replace("results", "logs", 1)
     log_dir = Path(log_base_str) / "evaluation"
@@ -134,27 +148,28 @@ async def main_async():
     loaded_questions = benchmark.load_data(ids_to_load=required_ids)
     questions_map = {q["id"]: q for q in loaded_questions}
 
-    evaluation_prompt_name = Path(evaluation_prompt_source).stem
-    is_official_evaluation = (
-        evaluation_prompt_name == benchmark.official_evaluation_prompt_name
+    # Enable advanced evaluation only if:
+    #  - The benchmark has a specialized verdict model, AND
+    #  - EITHER no official evaluation prompt name is defined (e.g., GPQA),
+    #    OR the resolved prompt is exactly that official prompt.
+    resolved_eval_prompt_stem = Path(evaluation_prompt_path).stem
+    supports_advanced_evaluation = benchmark.official_evaluation_model is not None and (
+        benchmark.official_evaluation_prompt_name is None
+        or resolved_eval_prompt_stem == benchmark.official_evaluation_prompt_name
     )
 
-    if is_official_evaluation and benchmark.official_evaluation_model:
+    if supports_advanced_evaluation:
         verdict_model = benchmark.official_evaluation_model
-        print(f"Using Official {benchmark.name.upper()} Evaluation prompt and metrics.")
+        print(
+            f"Using specialized evaluation format for '{benchmark.name.upper()}' benchmark."
+        )
     else:
         verdict_model = EvaluationVerdict
-        is_official_evaluation = False
-        if evaluation_prompt_name == benchmark.official_evaluation_prompt_name:
-            print(
-                f"Warning: Prompt '{evaluation_prompt_name}' appears to be an official prompt, "
-                f"but no specific evaluation model is defined for the '{benchmark.name}' benchmark. "
-                "Falling back to default evaluation format."
-            )
 
     evaluations_dir = args.input_file.parent.parent / "evaluations"
     evaluations_dir.mkdir(parents=True, exist_ok=True)
 
+    evaluation_prompt_name = Path(evaluation_prompt_source).stem
     sanitized_evaluator_model = args.evaluator_model.replace("/", "_").replace(":", "-")
     evaluation_filename = f"{timestamp}_evaluations_by_{sanitized_evaluator_model}_with_{evaluation_prompt_name}.json"
     evaluation_filepath = evaluations_dir / evaluation_filename
@@ -171,7 +186,14 @@ async def main_async():
 
             format_map = defaultdict(str)
             format_map.update(question_data)
+            # Unpack shuffled choices if they exist, for rich eval prompts
+            if "shuffled_choices" in question_data and isinstance(
+                question_data["shuffled_choices"], dict
+            ):
+                for key, value in question_data["shuffled_choices"].items():
+                    format_map[f"choice_{key}"] = value
             format_map["correct_answer"] = correct_answer
+            format_map["correct_answer_letter"] = correct_answer
             format_map["model_response"] = gen_data.get("response")
 
             eval_prompt = evaluation_prompt_template.format_map(format_map)
@@ -205,11 +227,16 @@ async def main_async():
     confidences = []
     for res in evaluations.values():
         evaluation = res.get("evaluation", {})
-        if is_official_evaluation:
-            is_correct = evaluation.get("correct") == "yes"
+        is_correct = None
+        if supports_advanced_evaluation:
+            is_correct_str = evaluation.get("correct")
+            if is_correct_str is not None:
+                is_correct = is_correct_str == "yes"
             confidences.append(evaluation.get("confidence", 100))
         else:
-            is_correct = evaluation.get("is_correct") is True
+            is_correct_bool = evaluation.get("is_correct")
+            if is_correct_bool is not None:
+                is_correct = is_correct_bool is True
 
         if is_correct is not None:
             correct_flags.append(is_correct)
@@ -224,7 +251,7 @@ async def main_async():
         "total_evaluated": total_evaluated,
     }
 
-    if is_official_evaluation and total_evaluated > 0:
+    if supports_advanced_evaluation and total_evaluated > 0:
         p_hat = accuracy / 100.0
         ci_half_width = 1.96 * math.sqrt((p_hat * (1 - p_hat)) / total_evaluated)
         summary_metrics["accuracy_ci_95"] = round(ci_half_width * 100, 2)
@@ -237,7 +264,8 @@ async def main_async():
     evaluation_metadata = {
         "model": args.evaluator_model,
         "reasoning_model": evaluator_llm.supports_reasoning,
-        "prompt_source": args.evaluation_prompt_source,
+        # Use the resolved prompt name, not the user's input argument.
+        "prompt_source": evaluation_prompt_source,
         "prompt_source_type": evaluation_prompt_type,
         "prompt_file": str(evaluation_prompt_path),
         "source_generations_file": args.input_file.name,
@@ -262,12 +290,13 @@ async def main_async():
 
     print("\n--- Final Score ---")
     print(f"Model: {generation_metadata['model']}")
+    # Use the resolved name here as well for the final console output
     print(f"Generation Prompt: {generation_metadata['prompt_source']}")
     print(
-        f"Evaluated By: {evaluation_metadata['model']} (with prompt '{args.evaluation_prompt_source}')"
+        f"Evaluated By: {evaluation_metadata['model']} (with prompt '{evaluation_prompt_source}')"
     )
 
-    if is_official_evaluation and total_evaluated > 0:
+    if supports_advanced_evaluation and total_evaluated > 0:
         print(
             f"Accuracy: {summary_metrics['accuracy']}% +/- {summary_metrics['accuracy_ci_95']}% (CI 95%)"
         )
@@ -290,7 +319,12 @@ async def main_async():
 
 
 def main():
-    asyncio.run(main_async())
+    try:
+        asyncio.run(main_async())
+    except (ValueError, FileNotFoundError) as e:
+        # Catch expected user errors and print a clean message.
+        print(f"\nERROR: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

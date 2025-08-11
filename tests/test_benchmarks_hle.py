@@ -1,4 +1,5 @@
 import pytest
+import types
 
 from promptmetrics.benchmarks.hle import HLEBenchmark, OfficialHLEEvaluation
 from promptmetrics.benchmarks.base import BaseBenchmark
@@ -144,3 +145,20 @@ def test_load_data_limits_by_max_samples(monkeypatch):
     )
     limited = b.load_data(max_samples=3)
     assert [r["id"] for r in limited] == ["0", "1", "2"]
+
+
+def test_get_size_quick_path_success(monkeypatch):
+    from promptmetrics.benchmarks.hle import HLEBenchmark
+
+    b = HLEBenchmark()
+    # get_dataset_infos returns a dict with config -> splits -> split -> num_examples
+    fake_infos = {
+        b.dataset_config: types.SimpleNamespace(
+            splits={b.dataset_split: types.SimpleNamespace(num_examples=123)}
+        )
+    }
+    monkeypatch.setenv("HF_TOKEN", "hf-test")
+    monkeypatch.setattr(
+        "promptmetrics.benchmarks.hle.get_dataset_infos", lambda *a, **k: fake_infos
+    )
+    assert b.get_size() == 123
