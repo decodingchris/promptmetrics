@@ -9,10 +9,17 @@ from promptmetrics.benchmarks.hle import HLEBenchmark
 
 # --- Core Value: Reproducible generation artifacts and multimodal handling ---
 
+
 def test_adapt_messages_for_text_only_variants():
     messages = [
         {"role": "system", "content": [{"type": "text", "text": "sys"}]},
-        {"role": "user", "content": [{"type": "text", "text": "Q"}, {"type": "image_url", "image_url": {"url": "http://x"}}]},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Q"},
+                {"type": "image_url", "image_url": {"url": "http://x"}},
+            ],
+        },
     ]
     out = rg.adapt_messages_for_text_only(messages)
     assert isinstance(out[0]["content"], str)
@@ -22,16 +29,23 @@ def test_adapt_messages_for_text_only_variants():
 
 
 @pytest.mark.asyncio
-async def test_pm_generate_creates_artifact(tmp_output_dir, monkeypatch, sample_questions):
+async def test_pm_generate_creates_artifact(
+    tmp_output_dir, monkeypatch, sample_questions
+):
     # Patch benchmark to avoid HF dataset calls
     monkeypatch.setattr(rg, "get_benchmark_instance", lambda name: HLEBenchmark())
 
     # Patch load_data to return our samples
-    monkeypatch.setattr(HLEBenchmark, "load_data", lambda self, max_samples=None: sample_questions)
+    monkeypatch.setattr(
+        HLEBenchmark, "load_data", lambda self, max_samples=None: sample_questions
+    )
 
     # Patch llm to avoid network and mark as vision-capable
     async def fake_generate(messages, temperature, max_tokens):
-        return {"content": "Explanation: ...\nAnswer: a cat\nConfidence: 95", "reasoning": None}
+        return {
+            "content": "Explanation: ...\nAnswer: a cat\nConfidence: 95",
+            "reasoning": None,
+        }
 
     llm_mock = types.SimpleNamespace(
         supports_vision=True,
@@ -43,6 +57,7 @@ async def test_pm_generate_creates_artifact(tmp_output_dir, monkeypatch, sample_
     def fake_parse_args():
         class A:
             pass
+
         a = A()
         a.model = "openai/gpt-4o"
         a.benchmark = "hle"
@@ -55,13 +70,26 @@ async def test_pm_generate_creates_artifact(tmp_output_dir, monkeypatch, sample_
         a.allow_full_run = True
         return a
 
-    monkeypatch.setattr(rg.argparse.ArgumentParser, "parse_args", lambda self: fake_parse_args())
-    monkeypatch.setattr(rg, "tqdm_asyncio", types.SimpleNamespace(gather=lambda *coros: rg.asyncio.gather(*coros)))
+    monkeypatch.setattr(
+        rg.argparse.ArgumentParser, "parse_args", lambda self: fake_parse_args()
+    )
+    monkeypatch.setattr(
+        rg,
+        "tqdm_asyncio",
+        types.SimpleNamespace(gather=lambda *coros: rg.asyncio.gather(*coros)),
+    )
 
     await rg.main_async()
 
     # Verify file structure and content
-    results_dir = tmp_output_dir / "results" / "hle" / "openai_gpt-4o" / "public-official_generation_v1" / "generations"
+    results_dir = (
+        tmp_output_dir
+        / "results"
+        / "hle"
+        / "openai_gpt-4o"
+        / "public-official_generation_v1"
+        / "generations"
+    )
     assert results_dir.exists()
     files = list(results_dir.glob("*_generations.json"))
     assert len(files) == 1
@@ -71,25 +99,35 @@ async def test_pm_generate_creates_artifact(tmp_output_dir, monkeypatch, sample_
 
 
 @pytest.mark.asyncio
-async def test_pm_generate_text_only_fallback_when_model_no_vision(tmp_output_dir, monkeypatch, sample_questions):
+async def test_pm_generate_text_only_fallback_when_model_no_vision(
+    tmp_output_dir, monkeypatch, sample_questions
+):
     # benchmark is multimodal; model text-only triggers note and prompt to continue
     monkeypatch.setattr(rg, "get_benchmark_instance", lambda name: HLEBenchmark())
-    monkeypatch.setattr(HLEBenchmark, "load_data", lambda self, max_samples=None: sample_questions)
+    monkeypatch.setattr(
+        HLEBenchmark, "load_data", lambda self, max_samples=None: sample_questions
+    )
 
     class FakeLLM:
-        def __init__(self, model_name): 
+        def __init__(self, model_name):
             self.supports_vision = False
             self.supports_reasoning = False
+
         async def generate(self, messages, temperature, max_tokens):
             return {"content": "Answer: test\nConfidence: 80", "reasoning": None}
 
     monkeypatch.setattr(rg, "OpenRouterLLM", FakeLLM)
     monkeypatch.setattr("builtins.input", lambda *a, **k: "y")
-    monkeypatch.setattr(rg, "tqdm_asyncio", types.SimpleNamespace(gather=lambda *coros: rg.asyncio.gather(*coros)))
+    monkeypatch.setattr(
+        rg,
+        "tqdm_asyncio",
+        types.SimpleNamespace(gather=lambda *coros: rg.asyncio.gather(*coros)),
+    )
 
     def fake_parse_args():
         class A:
             pass
+
         a = A()
         a.model = "any"
         a.benchmark = "hle"
@@ -102,14 +140,26 @@ async def test_pm_generate_text_only_fallback_when_model_no_vision(tmp_output_di
         a.allow_full_run = True
         return a
 
-    monkeypatch.setattr(rg.argparse.ArgumentParser, "parse_args", lambda self: fake_parse_args())
+    monkeypatch.setattr(
+        rg.argparse.ArgumentParser, "parse_args", lambda self: fake_parse_args()
+    )
     await rg.main_async()
 
-    results_dir = tmp_output_dir / "results" / "hle" / "any" / "public-official_generation_v1" / "generations"
+    results_dir = (
+        tmp_output_dir
+        / "results"
+        / "hle"
+        / "any"
+        / "public-official_generation_v1"
+        / "generations"
+    )
     files = list(results_dir.glob("*_generations.json"))
     data = json.loads(files[0].read_text(encoding="utf-8"))
     assert "modality_handling" in data["metadata"]["generation"]
-    assert data["metadata"]["generation"]["modality_handling"]["status"] == "text_only_fallback"
+    assert (
+        data["metadata"]["generation"]["modality_handling"]["status"]
+        == "text_only_fallback"
+    )
 
 
 @pytest.mark.asyncio
@@ -123,6 +173,7 @@ async def test_pm_generate_full_run_decline(tmp_output_dir, monkeypatch):
     def fake_parse_args():
         class A:
             pass
+
         a = A()
         a.model = "openai/gpt-4o"
         a.benchmark = "hle"
@@ -130,12 +181,14 @@ async def test_pm_generate_full_run_decline(tmp_output_dir, monkeypatch):
         a.output_dir = Path(tmp_output_dir)
         a.temperature = 0.0
         a.max_tokens = 128
-        a.max_samples = None   # triggers full run confirmation
+        a.max_samples = None  # triggers full run confirmation
         a.num_workers = 1
         a.allow_full_run = False
         return a
 
-    monkeypatch.setattr(rg.argparse.ArgumentParser, "parse_args", lambda self: fake_parse_args())
+    monkeypatch.setattr(
+        rg.argparse.ArgumentParser, "parse_args", lambda self: fake_parse_args()
+    )
 
     await rg.main_async()
     # Should not create any results directory

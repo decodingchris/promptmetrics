@@ -23,6 +23,7 @@ pm-evaluate = "promptmetrics.scripts.run_evaluation:main"
 # Defines dependencies only needed for development and testing
 [project.optional-dependencies]
 dev = [
+    "pre-commit",
     "pytest",
     "pytest-cov",
     "pytest-mock",

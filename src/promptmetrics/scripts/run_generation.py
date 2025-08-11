@@ -90,7 +90,9 @@ async def main_async():
     if generation_prompt_source.lower() == "official":
         if benchmark.official_generation_prompt_name:
             generation_prompt_source = benchmark.official_generation_prompt_name
-            print(f"Using official generation prompt for '{benchmark.name}': '{generation_prompt_source}'")
+            print(
+                f"Using official generation prompt for '{benchmark.name}': '{generation_prompt_source}'"
+            )
         else:
             raise ValueError(
                 f"The benchmark '{benchmark.name}' does not have an official generation prompt defined."
@@ -150,7 +152,9 @@ async def main_async():
     results_base_dir = args.output_dir / "results"
     logs_base_dir = args.output_dir / "logs"
 
-    experiment_path_segment = Path(benchmark.name) / sanitized_model_name / experiment_name
+    experiment_path_segment = (
+        Path(benchmark.name) / sanitized_model_name / experiment_name
+    )
 
     log_dir = logs_base_dir / experiment_path_segment / "generation"
     setup_logger(log_dir, f"{timestamp}_generation.log")
@@ -158,7 +162,6 @@ async def main_async():
     output_dir = results_base_dir / experiment_path_segment / "generations"
     output_dir.mkdir(parents=True, exist_ok=True)
     generations_filepath = output_dir / f"{timestamp}_generations.json"
-
 
     questions = benchmark.load_data(max_samples=args.max_samples)
     generations = {}

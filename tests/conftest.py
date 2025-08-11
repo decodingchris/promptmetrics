@@ -1,7 +1,6 @@
 import os
 import json
 import asyncio
-import time
 from pathlib import Path
 import pytest
 
@@ -43,7 +42,14 @@ def sample_questions():
 @pytest.fixture
 def generations_sample_artifact(tmp_output_dir, sample_questions):
     # Create a small generations file similar to pm-generate output
-    artifact_dir = tmp_output_dir / "results" / "hle" / "test-model" / "public-official_generation_v1" / "generations"
+    artifact_dir = (
+        tmp_output_dir
+        / "results"
+        / "hle"
+        / "test-model"
+        / "public-official_generation_v1"
+        / "generations"
+    )
     artifact_dir.mkdir(parents=True, exist_ok=True)
     artifact_path = artifact_dir / "20250101T000000Z_generations.json"
 
@@ -62,8 +68,12 @@ def generations_sample_artifact(tmp_output_dir, sample_questions):
             }
         },
         "generations": {
-            sample_questions[0]["id"]: {"response": "Explanation: ... Answer: a cat\nConfidence: 95"},
-            sample_questions[1]["id"]: {"response": "Explanation: ... Answer: 5\nConfidence: 55"},
+            sample_questions[0]["id"]: {
+                "response": "Explanation: ... Answer: a cat\nConfidence: 95"
+            },
+            sample_questions[1]["id"]: {
+                "response": "Explanation: ... Answer: 5\nConfidence: 55"
+            },
         },
     }
     artifact_path.write_text(json.dumps(gens, indent=2), encoding="utf-8")

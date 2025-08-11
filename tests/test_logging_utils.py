@@ -1,5 +1,4 @@
 import logging
-from pathlib import Path
 
 from promptmetrics.logging_utils import setup_logger
 

@@ -1,5 +1,3 @@
-import types
-from pathlib import Path
 import pytest
 
 from promptmetrics.benchmarks.hle import HLEBenchmark, OfficialHLEEvaluation
@@ -7,6 +5,7 @@ from promptmetrics.benchmarks.base import BaseBenchmark
 
 
 # --- Core Value: Multi-modal formatting and official prompt compatibility ---
+
 
 def test_hle_properties_and_officials():
     b = HLEBenchmark()
@@ -36,7 +35,9 @@ def test_hle_properties_and_officials():
         "user-only-text-only",
     ],
 )
-def test_format_prompt_messages_variants(has_system, has_user, image_url, expected_roles, expected_image):
+def test_format_prompt_messages_variants(
+    has_system, has_user, image_url, expected_roles, expected_image
+):
     b = HLEBenchmark()
     parts = []
     if has_system:
@@ -64,7 +65,10 @@ def test_format_prompt_messages_variants(has_system, has_user, image_url, expect
         assert content[0]["text"] == ""
 
     if expected_image:
-        assert any(p.get("type") == "image_url" and p["image_url"]["url"] == image_url for p in content)
+        assert any(
+            p.get("type") == "image_url" and p["image_url"]["url"] == image_url
+            for p in content
+        )
     else:
         assert all(p.get("type") != "image_url" for p in content)
 
@@ -73,9 +77,16 @@ def test_get_size_fallback(monkeypatch):
     b = HLEBenchmark()
 
     # Force get_dataset_infos to raise so we hit the fallback
-    monkeypatch.setattr("promptmetrics.benchmarks.hle.get_dataset_infos", lambda *a, **k: (_ for _ in ()).throw(KeyError("x")))
+    monkeypatch.setattr(
+        "promptmetrics.benchmarks.hle.get_dataset_infos",
+        lambda *a, **k: (_ for _ in ()).throw(KeyError("x")),
+    )
     # Avoid network in load_data fallback
-    monkeypatch.setattr(HLEBenchmark, "load_data", lambda self, max_samples=None, ids_to_load=None: [{"id": "1"}, {"id": "2"}])
+    monkeypatch.setattr(
+        HLEBenchmark,
+        "load_data",
+        lambda self, max_samples=None, ids_to_load=None: [{"id": "1"}, {"id": "2"}],
+    )
     assert b.get_size() == 2
 
 
@@ -103,7 +114,9 @@ def test_load_data_selects_by_ids(monkeypatch):
         def __iter__(self):
             return iter(self._data)
 
-    monkeypatch.setattr("promptmetrics.benchmarks.hle.load_dataset", lambda *a, **k: FakeDataset())
+    monkeypatch.setattr(
+        "promptmetrics.benchmarks.hle.load_dataset", lambda *a, **k: FakeDataset()
+    )
     selected = b.load_data(ids_to_load=["c", "a"])
     assert [r["id"] for r in selected] == ["c", "a"]
 
@@ -126,6 +139,8 @@ def test_load_data_limits_by_max_samples(monkeypatch):
         def __iter__(self):
             return iter(self._data)
 
-    monkeypatch.setattr("promptmetrics.benchmarks.hle.load_dataset", lambda *a, **k: FakeDataset())
+    monkeypatch.setattr(
+        "promptmetrics.benchmarks.hle.load_dataset", lambda *a, **k: FakeDataset()
+    )
     limited = b.load_data(max_samples=3)
     assert [r["id"] for r in limited] == ["0", "1", "2"]

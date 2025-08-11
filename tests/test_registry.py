@@ -14,5 +14,7 @@ def test_get_benchmark_instance_success():
 
 
 def test_get_benchmark_instance_unknown():
-    with pytest.raises(ValueError, match="Unknown benchmark: 'bad'.*Available benchmarks:"):
+    with pytest.raises(
+        ValueError, match="Unknown benchmark: 'bad'.*Available benchmarks:"
+    ):
         get_benchmark_instance("bad")

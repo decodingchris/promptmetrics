@@ -1,31 +1,43 @@
 import json
 import time
 import types
-from pathlib import Path
 import pytest
 
 import promptmetrics.scripts.run_generation as rg
-import promptmetrics.scripts.run_evaluation as reval
 from promptmetrics.benchmarks.hle import HLEBenchmark, OfficialHLEEvaluation
 
 
 # --- Real World Scenarios: 5 categories ---
 
+
 def test_scraped_from_wild_formatting_handles_long_text_and_image(sample_questions):
     b = HLEBenchmark()
-    long_question = " ".join(["Lorem ipsum dolor sit amet, consectetur adipiscing elit."] * 50)
-    q = {"id": "wild1", "question": long_question, "image": "https://example.org/wild.png"}
+    long_question = " ".join(
+        ["Lorem ipsum dolor sit amet, consectetur adipiscing elit."] * 50
+    )
+    q = {
+        "id": "wild1",
+        "question": long_question,
+        "image": "https://example.org/wild.png",
+    }
     pt = "---[SYSTEM]---\nFollow format.\n---[USER]---\n{question}"
     msgs = b.format_prompt_messages(q, pt)
     user = next(m for m in msgs if m["role"] == "user")
     # Assert both the long text and image are present
-    assert user["content"][0]["type"] == "text" and long_question in user["content"][0]["text"]
+    assert (
+        user["content"][0]["type"] == "text"
+        and long_question in user["content"][0]["text"]
+    )
     assert any(p.get("type") == "image_url" for p in user["content"])
 
 
 def test_generated_by_tool_official_prompt_has_fixed_format():
-    content, _, _ = rg.load_prompt_template("official_generation_v1", "hle", "generation")
-    assert "Explanation:" in content and "Answer:" in content and "Confidence:" in content
+    content, _, _ = rg.load_prompt_template(
+        "official_generation_v1", "hle", "generation"
+    )
+    assert (
+        "Explanation:" in content and "Answer:" in content and "Confidence:" in content
+    )
 
 
 def test_human_edited_prompts_missing_user_section_gracefully_formats():
@@ -42,12 +54,15 @@ def test_human_edited_prompts_missing_user_section_gracefully_formats():
 async def test_legacy_system_evaluator_no_structured_outputs_fallback(monkeypatch):
     # generate_structured returns model with no parsed payload -> handled gracefully by OpenRouterLLM
     from promptmetrics.llm_providers.openrouter import OpenRouterLLM
+
     # Ensure no model metadata usage
     monkeypatch.setattr(OpenRouterLLM, "MODELS_CACHE", {})
 
     class FakeCompletion:
         def __init__(self):
-            msg = types.SimpleNamespace(refusal=None, parsed=None, content="UNSTRUCTURED")
+            msg = types.SimpleNamespace(
+                refusal=None, parsed=None, content="UNSTRUCTURED"
+            )
             self.choices = [types.SimpleNamespace(message=msg)]
 
     async def fake_parse(**kwargs):
@@ -65,12 +80,15 @@ async def test_legacy_system_evaluator_no_structured_outputs_fallback(monkeypatc
 def test_corrupted_in_transit_missing_generation_key(monkeypatch, tmp_path):
     # Create malformed generations file (missing 'generations' key)
     bad = tmp_path / "bad.json"
-    bad.write_text(json.dumps({"metadata": {"generation": {"model": "x"}}}), encoding="utf-8")
+    bad.write_text(
+        json.dumps({"metadata": {"generation": {"model": "x"}}}), encoding="utf-8"
+    )
     data = json.loads(bad.read_text(encoding="utf-8"))
     assert "generations" not in data
 
 
 # --- Performance Benchmarks ---
+
 
 class TestPerformance:
     def test_adapt_messages_for_text_only_large(self):
@@ -79,7 +97,9 @@ class TestPerformance:
         for i in range(2000):
             content = [{"type": "text", "text": "x" * 50}]
             if i % 4 == 0:
-                content.append({"type": "image_url", "image_url": {"url": f"http://img/{i}.png"}})
+                content.append(
+                    {"type": "image_url", "image_url": {"url": f"http://img/{i}.png"}}
+                )
             messages.append({"role": "user", "content": content})
         start = time.perf_counter()
         out = rg.adapt_messages_for_text_only(messages)
@@ -89,7 +109,12 @@ class TestPerformance:
 
     def test_format_prompt_messages_scalable(self):
         b = HLEBenchmark()
-        question = {"id": "q", "question": "?" * 2000, "image": "https://img.png", "answer": "A"}
+        question = {
+            "id": "q",
+            "question": "?" * 2000,
+            "image": "https://img.png",
+            "answer": "A",
+        }
         pt = "---[SYSTEM]---\nX\n---[USER]---\n{question}"
         start = time.perf_counter()
         msgs = b.format_prompt_messages(question, pt)
@@ -100,6 +125,7 @@ class TestPerformance:
     def test_logging_setup_fast(self, tmp_path):
         start = time.perf_counter()
         from promptmetrics.logging_utils import setup_logger
+
         setup_logger(tmp_path, "perf.log")
         duration = time.perf_counter() - start
         assert duration < 0.05
@@ -107,6 +133,7 @@ class TestPerformance:
     def test_ece_computation_fast(self):
         import numpy as np
         from promptmetrics.scripts.run_evaluation import calculate_ece
+
         conf = np.random.rand(10000)
         corr = (conf > 0.5).astype(int)
         start = time.perf_counter()

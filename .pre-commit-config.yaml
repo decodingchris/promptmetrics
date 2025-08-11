@@ -1,0 +1,42 @@
+# .pre-commit-config.yaml
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      # --- Basic file hygiene ---
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md] # Keep intentional line breaks in Markdown
+      - id: end-of-file-fixer
+      - id: check-added-large-files # Prevent committing large files
+      - id: check-merge-conflict    # Prevent committing files with merge conflicts
+      # --- Syntax checks ---
+      - id: check-json
+      - id: check-yaml
+      # --- Python-specific checks ---
+      - id: check-ast
+      - id: debug-statements # Prevent committing `breakpoint()` or `pdb` calls
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.8 # Use the version from the documentation
+    hooks:
+      # Run the linter and automatically fix issues.
+      # This runs before the formatter, as recommended.
+      - id: ruff-check
+        args: [--fix]
+      # Run the formatter.
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.17.1 # Use the version from the documentation
+    hooks:
+      - id: mypy
+        # The project's dependencies must be available to mypy in its isolated environment.
+        # These are sourced from your pyproject.toml.
+        additional_dependencies:
+          - pydantic
+          - numpy
+          - openai
+          - httpx
+          - datasets
+          - types-tqdm
