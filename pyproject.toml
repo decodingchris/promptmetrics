@@ -30,6 +30,7 @@ dev = [
     "pytest-asyncio",
     "ruff",
     "mypy",
+    ""types-tqdm",
 ]
 
 [tool.uv]
@@ -43,3 +44,9 @@ omit = [
     # Exclude the empty __init__.py file
     "src/promptmetrics/__init__.py",
 ]
+
+[tool.mypy]
+# Ignore untyped 3rd party libraries that don't have stubs
+[[tool.mypy.overrides]]
+module = ["datasets", "datasets.*"]
+ignore_missing_imports = true
