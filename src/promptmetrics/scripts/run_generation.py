@@ -48,6 +48,12 @@ async def main_async():
         help="Name of a built-in generation prompt, path to a custom prompt file, or 'official' to use the benchmark's default.",
     )
     parser.add_argument(
+        "--output_dir",
+        type=Path,
+        default=Path("."),
+        help="The root directory to save 'results' and 'logs' subdirectories. Defaults to the current working directory.",
+    )
+    parser.add_argument(
         "--temperature",
         type=float,
         default=0.0,
@@ -141,16 +147,18 @@ async def main_async():
     sanitized_model_name = args.model.replace("/", "_").replace(":", "-")
     timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
-    log_dir = Path(
-        f"logs/{benchmark.name}/{sanitized_model_name}/{experiment_name}/generation"
-    )
+    results_base_dir = args.output_dir / "results"
+    logs_base_dir = args.output_dir / "logs"
+
+    experiment_path_segment = Path(benchmark.name) / sanitized_model_name / experiment_name
+
+    log_dir = logs_base_dir / experiment_path_segment / "generation"
     setup_logger(log_dir, f"{timestamp}_generation.log")
 
-    output_dir = Path(
-        f"results/{benchmark.name}/{sanitized_model_name}/{experiment_name}/generations"
-    )
+    output_dir = results_base_dir / experiment_path_segment / "generations"
     output_dir.mkdir(parents=True, exist_ok=True)
     generations_filepath = output_dir / f"{timestamp}_generations.json"
+
 
     questions = benchmark.load_data(max_samples=args.max_samples)
     generations = {}
