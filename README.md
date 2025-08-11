@@ -73,6 +73,8 @@ uv run pm-generate \
   --generation_prompt_source "official_generation_v1" \
   --max_samples 3
 ```
+By default, this saves outputs to `results/` and `logs/` subdirectories in your current location. You can redirect this using the `--output_dir` flag (e.g., `--output_dir ./my-experiments`).
+
 The script will print the full path to the generated artifact, which you will use in the next step.
 
 ### Step 2: Evaluate the Generations
@@ -89,7 +91,7 @@ uv run pm-evaluate \
 This command will:
 1.  Read the generations file.
 2.  Use the specified evaluator model to evaluate each answer with guaranteed structured output.
-3.  Save the detailed evaluations to a new timestamped file in the `evaluations/` directory.
+3.  Save the detailed evaluations to a new timestamped file in the `evaluations/` directory, parallel to the `generations/` directory.
 4.  Print the final, trustworthy score to your console, including advanced metrics for official evaluations.
 
 ```
@@ -172,7 +174,7 @@ Expected Calibration Error (ECE): 25.50%
 
 ## Understanding the Results
 
-The `results/` directory is organized hierarchically for clarity and scalability:
+By default, `PromptMetrics` saves data into `results/` and `logs/` directories. The `results/` directory is organized hierarchically for clarity and scalability:
 `results/{benchmark_name}/{model_name}/{experiment_name}/`
 
 Each experiment folder contains two subdirectories:
