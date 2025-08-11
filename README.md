@@ -149,13 +149,13 @@ uv run pm-generate --benchmark "hle" ... --allow-full-run
 uv run pm-generate \
   --model "openai/gpt-4o" \
   --benchmark "hle" \
-  --generation_prompt_source "official_generation_v1" \
+  --generation_prompt_source "official" \
   --max_samples 3
 
 # Evaluate using the official HLE evaluation prompt for advanced metrics
 uv run pm-evaluate \
   --input_file "results/hle/openai_gpt-4o/public-official_generation_v1/generations/...(new file).json" \
-  --evaluation_prompt_source "official_evaluation_v1"
+  --evaluation_prompt_source "official"
 ```
 
 **2. Get Advanced Metrics:** When using an official evaluation prompt, the final output will include specialized metrics like **Expected Calibration Error (ECE)**.

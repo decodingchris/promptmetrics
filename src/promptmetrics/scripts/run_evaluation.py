@@ -236,6 +236,7 @@ async def main_async():
 
     evaluation_metadata = {
         "model": args.evaluator_model,
+        "reasoning_model": evaluator_llm.supports_reasoning,
         "prompt_source": args.evaluation_prompt_source,
         "prompt_source_type": evaluation_prompt_type,
         "prompt_file": str(evaluation_prompt_path),

@@ -71,12 +71,17 @@ class OpenRouterLLM:
 
         model_info = self.MODELS_CACHE.get(model_name)
         self.supports_vision = False
+        self.supports_reasoning = False
         if model_info:
             input_modalities = model_info.get("architecture", {}).get(
                 "input_modalities", []
             )
             if "image" in input_modalities:
                 self.supports_vision = True
+
+            supported_params = model_info.get("supported_parameters", [])
+            if "reasoning" in supported_params:
+                self.supports_reasoning = True
 
     async def generate(
         self, messages: list, temperature: float = 0.0, max_tokens: int = 8192

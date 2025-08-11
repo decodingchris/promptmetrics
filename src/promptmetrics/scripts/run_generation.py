@@ -184,6 +184,7 @@ async def main_async():
 
     generation_metadata = {
         "model": args.model,
+        "reasoning_model": llm.supports_reasoning,
         "benchmark": args.benchmark,
         "prompt_source": args.generation_prompt_source,
         "prompt_source_type": source_type,
