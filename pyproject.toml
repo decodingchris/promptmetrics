@@ -9,6 +9,8 @@ dependencies = [
     "tqdm",
     "Pillow",
     "pydantic",
+    "httpx",
+    "numpy",
 ]
 readme = "README.md"
 requires-python = ">= 3.11"
@@ -24,6 +26,7 @@ dev = [
     "pytest",
     "pytest-cov",
     "pytest-mock",
+    "pytest-asyncio",
     "ruff",
     "mypy",
 ]
