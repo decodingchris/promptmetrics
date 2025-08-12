@@ -212,7 +212,7 @@ async def main_async():
     )
     results = await tqdm_asyncio.gather(*tasks)
     for q_id, generation_data in results:
-        if q_id:
+        if q_id is not None:
             generations[q_id] = generation_data
 
     generation_metadata = {

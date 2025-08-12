@@ -220,7 +220,7 @@ async def main_async():
     )
     results = await tqdm_asyncio.gather(*tasks)
     for q_id, evaluated_data in results:
-        if q_id:
+        if q_id is not None:
             evaluations[q_id] = evaluated_data
 
     correct_flags = []
