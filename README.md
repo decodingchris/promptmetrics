@@ -4,7 +4,7 @@ A modular toolkit for the rigorous evaluation and metric generation of LLM promp
 
 ---
 
-`PromptMetrics` is a professional-grade Python toolkit for the rigorous evaluation of Large Language Model (LLM) prompts. It provides a flexible, reproducible, and cost-effective framework for measuring prompt performance against academic benchmarks like **[AIME 2025](https://huggingface.co/datasets/yentinglin/aime_2025)**, **[GPQA](https://huggingface.co/datasets/idavidrein/gpqa)**, and **[Humanity's Last Exam (HLE)](https://huggingface.co/datasets/cais/hle)**, including full support for multi-modal (vision) questions where applicable.
+`PromptMetrics` is a professional-grade Python toolkit for the rigorous evaluation of Large Language Model (LLM) prompts. It provides a flexible, reproducible, and cost-effective framework for measuring prompt performance against academic benchmarks like **[AIME 2025](https://huggingface.co/datasets/yentinglin/aime_2025)**, **[GPQA](https://huggingface.co/datasets/idavidrein/gpqa)**, **[Humanity's Last Exam (HLE)](https://huggingface.co/datasets/cais/hle)**, and the comprehensive **[MMMU](https://huggingface.co/datasets/MMMU/MMMU)** benchmark, including full support for multi-modal (vision) questions where applicable.
 
 This tool is designed for serious prompt engineering research. It allows you to:
 -   **Test any prompt** against standardized, version-controlled datasets, including vision benchmarks.
@@ -90,6 +90,27 @@ uv run pm-generate \
   --generation_prompt_source "official" \
   --max_samples 3
 ```
+
+**Example 4: Running the full, multi-subject MMMU benchmark**
+This command runs the entire MMMU benchmark, which includes questions from all 30 of its subjects.
+```bash
+uv run pm-generate \
+  --model "openai/gpt-4o" \
+  --benchmark "mmmu" \
+  --generation_prompt_source "official" \
+  --max_samples 10
+```
+
+**Example 5: Running a single subject from the MMMU benchmark**
+For faster, targeted tests, you can run on a single subject like "Art" or "Computer_Science".
+```bash
+uv run pm-generate \
+  --model "openai/gpt-4o" \
+  --benchmark "mmmu_art" \
+  --generation_prompt_source "official" \
+  --max_samples 3
+```
+
 By default, this saves outputs to `results/` and `logs/` subdirectories in your current location. You can redirect this using the `--output_dir` flag (e.g., `--output_dir ./my-experiments`).
 
 The script will print the full path to the generated artifact, which you will use in the next step.
@@ -176,7 +197,7 @@ uv run pm-evaluate \
 
 **2. Get Advanced Metrics:** When an evaluation uses the benchmark's specialized Pydantic model for grading, the final output will include advanced metrics like **Expected Calibration Error (ECE)**. This is automatically triggered when using an official evaluation prompt.
 
-**Crucially, this also works for benchmarks like GPQA that do not have an *official* evaluation prompt.** When you use `--evaluation_prompt_source "official"` for GPQA, `PromptMetrics` intelligently falls back to a compatible, high-quality community prompt (`non_official_evaluation_v1.txt`) while still using GPQA's specialized `OfficialGPQAEvaluation` model. This ensures you get advanced metrics even when an official grading prompt isn't published.
+**Crucially, this also works for benchmarks like GPQA and MMMU that do not have an *official* evaluation prompt.** When you use `--evaluation_prompt_source "official"`, `PromptMetrics` intelligently falls back to a compatible, high-quality community prompt (`non_official_evaluation_v1.txt`) while still using the benchmark's specialized Pydantic model (`OfficialGPQAEvaluation` or `OfficialMMMU_V1Evaluation`). This ensures you get advanced metrics even when an official grading prompt isn't published.
 ```
 --- Final Score ---
 Model: openai/gpt-4o

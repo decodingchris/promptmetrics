@@ -1,5 +1,18 @@
+# src/promptmetrics/utils.py
+
 from pathlib import Path
 from typing import Tuple
+import base64
+from io import BytesIO
+from PIL import Image
+
+
+def pil_to_base64_url(img: Image.Image, format: str = "PNG") -> str:
+    """Converts a Pillow image to a base64 data URL."""
+    buffered = BytesIO()
+    img.save(buffered, format=format)
+    img_str = base64.b64encode(buffered.getvalue()).decode()
+    return f"data:image/{format.lower()};base64,{img_str}"
 
 
 def load_prompt_template(

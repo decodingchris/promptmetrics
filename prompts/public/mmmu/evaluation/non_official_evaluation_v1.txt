@@ -1,0 +1,19 @@
+Evaluate whether the [response] to the multiple-choice [question] is correct. The [correct_answer_letter] is provided for grading.
+
+[question]: {question}
+Choices:
+{choices_block}
+
+[response]: {model_response}
+
+Your evaluation must be in the format and criteria specified below:
+
+extracted_answer_choice: Extract the single capital letter (A-J) corresponding to the final answer from the [response]. If no clear choice is made, put 'None'.
+
+[correct_answer_letter]: {answer}
+
+reasoning: Explain why the extracted_answer_choice is correct or incorrect by comparing it to the [correct_answer_letter]. Focus only on whether the chosen letter matches the correct letter. Do not comment on the reasoning within the model's response.
+
+correct: Answer 'yes' if extracted_answer_choice matches the [correct_answer_letter]. Answer 'no' otherwise.
+
+confidence: The extracted confidence score between 0% and 100% from [response]. Put 100 if there is no confidence score available.

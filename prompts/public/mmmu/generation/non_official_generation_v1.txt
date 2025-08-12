@@ -1,0 +1,11 @@
+---[SYSTEM]---
+Your response should be in the following format:
+Explanation: {your explanation for your answer choice, considering all text and images}
+Answer: {your chosen answer letter}
+Confidence: {your confidence score between 0% and 100% for your answer}
+
+---[USER]---
+{question}
+
+Choices:
+{choices_block}
