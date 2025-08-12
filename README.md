@@ -4,7 +4,7 @@ A modular toolkit for the rigorous evaluation and metric generation of LLM promp
 
 ---
 
-`PromptMetrics` is a professional-grade Python toolkit for the rigorous evaluation of Large Language Model (LLM) prompts. It provides a flexible, reproducible, and cost-effective framework for measuring prompt performance against academic benchmarks like **[GPQA](https://huggingface.co/datasets/idavidrein/gpqa)** and **[Humanity's Last Exam (HLE)](https://huggingface.co/datasets/cais/hle)**, including full support for multi-modal (vision) questions where applicable.
+`PromptMetrics` is a professional-grade Python toolkit for the rigorous evaluation of Large Language Model (LLM) prompts. It provides a flexible, reproducible, and cost-effective framework for measuring prompt performance against academic benchmarks like **[AIME 2025](https://huggingface.co/datasets/yentinglin/aime_2025)**, **[GPQA](https://huggingface.co/datasets/idavidrein/gpqa)**, and **[Humanity's Last Exam (HLE)](https://huggingface.co/datasets/cais/hle)**, including full support for multi-modal (vision) questions where applicable.
 
 This tool is designed for serious prompt engineering research. It allows you to:
 -   **Test any prompt** against standardized, version-controlled datasets, including vision benchmarks.
@@ -70,7 +70,7 @@ This step runs your chosen prompt and model against a benchmark, saving the raw 
 uv run pm-generate \
   --model "openai/gpt-4o" \
   --benchmark "hle" \
-  --generation_prompt_source "official_generation_v1" \
+  --generation_prompt_source "official" \
   --max_samples 3
 ```
 
@@ -79,8 +79,16 @@ uv run pm-generate \
 uv run pm-generate \
   --model "google/gemini-pro" \
   --benchmark "gpqa_diamond" \
-  --generation_prompt_source "official_generation_zeroshot_v1" \
+  --generation_prompt_source "official" \
   --max_samples 5
+```
+**Example 3: Running the AIME 2025 mathematical reasoning benchmark**
+```bash
+uv run pm-generate \
+  --model "anthropic/claude-3-sonnet-3.5-20240620" \
+  --benchmark "aime_2025" \
+  --generation_prompt_source "official" \
+  --max_samples 3
 ```
 By default, this saves outputs to `results/` and `logs/` subdirectories in your current location. You can redirect this using the `--output_dir` flag (e.g., `--output_dir ./my-experiments`).
 
@@ -95,7 +103,7 @@ This step takes the generated artifact and uses a powerful "evaluator" LLM to gr
 uv run pm-evaluate \
   --input_file "results/hle/openai_gpt-4o/public-official_generation_v1/generations/<TIMESTAMP>_generations.json" \
   --evaluator_model "openai/gpt-4o" \
-  --evaluation_prompt_source "official_evaluation_v1"
+  --evaluation_prompt_source "official"
 ```
 This command will:
 1.  Read the generations file.
@@ -162,7 +170,7 @@ uv run pm-generate \
 
 # Evaluate using the official HLE evaluation prompt for advanced metrics
 uv run pm-evaluate \
-  --input_file "results/hle/openai_gpt-4o/public-official_generation_v1/generations/...(new file).json" \
+  --input_file "results/hle/openai_gpt-4o/public-official_generation_v1/generations/...(new_file).json" \
   --evaluation_prompt_source "official"
 ```
 
@@ -172,8 +180,8 @@ uv run pm-evaluate \
 ```
 --- Final Score ---
 Model: openai/gpt-4o
-Generation Prompt: official_generation_v1
-Evaluated By: openai/gpt-4o (with prompt 'official_evaluation_v1')
+Generation Prompt: non_official_generation_v1
+Evaluated By: openai/gpt-4o (with prompt 'non_official_evaluation_v1')
 Accuracy: 66.67% +/- 38.49% (CI 95%)
 Correct: 2 / 3
 Expected Calibration Error (ECE): 25.50%
