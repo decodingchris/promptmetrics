@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Type
 from pydantic import BaseModel, Field
-from datasets import load_dataset, get_dataset_infos, concatenate_datasets
+from datasets import load_dataset, get_dataset_infos
 from huggingface_hub.errors import HfHubHTTPError
 from PIL import Image
 
@@ -194,7 +194,6 @@ class MMMUAllBenchmark(MMMUBaseBenchmark):
                 "Could not retrieve MMMU subject list. Check network connection."
             )
 
-        # --- OPTIMIZATION for ids_to_load (used by pm-evaluate) ---
         if ids_to_load:
             logger.info(
                 f"Lazily loading {len(ids_to_load)} specific samples for MMMU..."
@@ -217,9 +216,7 @@ class MMMUAllBenchmark(MMMUBaseBenchmark):
                         if not ids_set:
                             break
             return samples
-        # --- END OPTIMIZATION ---
 
-        # --- OPTIMIZATION for max_samples (used by pm-generate) ---
         if max_samples:
             logger.info(
                 f"Lazily loading up to {max_samples} samples for MMMU benchmark..."
@@ -239,21 +236,23 @@ class MMMUAllBenchmark(MMMUBaseBenchmark):
                         break
                     samples.append(_adapt_mmmu_sample(sample))
             return samples
-        # --- END OPTIMIZATION ---
 
         # Original logic for a full run
         logger.info(
             f"Streaming all {len(self.all_configs)} subjects for a full MMMU run..."
         )
-        all_datasets = [
+        # Build a stream per subject and chain them without using concatenate_datasets,
+        # which expects Arrow Datasets and may not work with IterableDatasets.
+        all_iterables = (
             load_dataset(
                 self.dataset_name, name=config, split=self.dataset_split, streaming=True
             )
             for config in self.all_configs
-        ]
-        dataset = concatenate_datasets(all_datasets)
-        dataset = dataset.map(_adapt_mmmu_sample)
-        return list(dataset)
+        )
+        chained = itertools.chain.from_iterable(all_iterables)
+        # Adapt as we stream, then materialize
+        adapted = (_adapt_mmmu_sample(sample) for sample in chained)
+        return list(adapted)
 
 
 class MMMUSingleBenchmark(MMMUBaseBenchmark):

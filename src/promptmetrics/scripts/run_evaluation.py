@@ -31,8 +31,12 @@ def calculate_ece(confidence: np.ndarray, correct: np.ndarray, n_bins=10) -> flo
     bin_lowers = bin_boundaries[:-1]
     bin_uppers = bin_boundaries[1:]
     ece = 0.0
-    for bin_lower, bin_upper in zip(bin_lowers, bin_uppers):
-        in_bin = (confidence > bin_lower) & (confidence <= bin_upper)
+    for i, (bin_lower, bin_upper) in enumerate(zip(bin_lowers, bin_uppers)):
+        # Include 0.0 confidence in the first bin
+        if i == 0:
+            in_bin = (confidence >= bin_lower) & (confidence <= bin_upper)
+        else:
+            in_bin = (confidence > bin_lower) & (confidence <= bin_upper)
         prop_in_bin = np.mean(in_bin)
         if prop_in_bin > 0:
             accuracy_in_bin = np.mean(correct[in_bin])
@@ -189,6 +193,20 @@ async def main_async():
 
             format_map = defaultdict(str)
             format_map.update(question_data)
+            # MMMU fidelity: ensure choices_block is present for evaluation prompts
+            # This improves evaluator quality by showing the actual options.
+            if benchmark.name.startswith("mmmu"):
+                choices_list = []
+                parsed_choices = question_data.get("parsed_choices")
+                if isinstance(parsed_choices, dict):
+                    for letter, text in sorted(parsed_choices.items()):
+                        choices_list.append(f"({letter}) {text}")
+                format_map["choices_block"] = "\n".join(choices_list)
+                # The MMMU evaluation template references {answer} for the correct letter,
+                # but we also populate correct_answer_letter consistently.
+                if "answer" in question_data:
+                    format_map["correct_answer_letter"] = question_data["answer"]
+
             # Unpack shuffled choices if they exist, for rich eval prompts
             if "shuffled_choices" in question_data and isinstance(
                 question_data["shuffled_choices"], dict

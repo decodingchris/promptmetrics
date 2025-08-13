@@ -309,3 +309,58 @@ def test_adapt_mmmu_sample_parsing_failure():
     sample = {"id": "bad", "question": "Q", "options": "not-a-list", "answer": "A"}
     out = _adapt_mmmu_sample(sample)
     assert out["parsed_choices"] == {}
+
+
+def test_mmmu_all_full_run_streaming_no_concatenate(monkeypatch):
+    # Ensure deterministic subject list
+    monkeypatch.setattr(
+        "promptmetrics.benchmarks.mmmu._get_all_mmmu_configs",
+        lambda: ["Art", "CS"],
+    )
+
+    # Make any attempt to call concatenate_datasets fail to prove we avoided it
+    import promptmetrics.benchmarks.mmmu as mmmu_mod
+
+    monkeypatch.setattr(
+        mmmu_mod,
+        "concatenate_datasets",
+        lambda *a, **k: (_ for _ in ()).throw(
+            AssertionError("should not use concatenate_datasets")
+        ),
+    )
+
+    class FakeIterableDataset:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def __iter__(self):
+            for r in self._rows:
+                yield r
+
+    art_rows = [
+        {"id": "a1", "question": "Q1", "options": "['A','B']", "answer": "A"},
+    ]
+    cs_rows = [
+        {"id": "c1", "question": "Q2", "options": "['X','Y','Z']", "answer": "B"},
+    ]
+
+    def fake_load_dataset(path, name=None, split=None, streaming=False):
+        assert streaming is True
+        if name == "Art":
+            return FakeIterableDataset(art_rows)
+        elif name == "CS":
+            return FakeIterableDataset(cs_rows)
+        raise AssertionError("Unexpected config")
+
+    monkeypatch.setattr("promptmetrics.benchmarks.mmmu.load_dataset", fake_load_dataset)
+
+    b = MMMUAllBenchmark()
+    out = b.load_data()  # full run path (no ids_to_load, no max_samples)
+    ids = {s["id"] for s in out}
+    assert ids == {"a1", "c1"}
+    for s in out:
+        assert "parsed_choices" in s and isinstance(s["parsed_choices"], dict)
+        # Check choice keys are capital letters
+        assert all(
+            k in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" for k in s["parsed_choices"].keys()
+        )

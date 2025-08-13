@@ -226,3 +226,106 @@ async def test_pm_evaluate_mmmu_custom_prompt_uses_default_verdict(
     assert summary["total_evaluated"] == 2
     assert "accuracy_ci_95" not in summary
     assert "expected_calibration_error" not in summary
+
+
+@pytest.mark.asyncio
+async def test_pm_evaluate_mmmu_prompt_contains_choices_block(tmp_path, monkeypatch):
+    # Avoid network config load in MMMUAllBenchmark() constructor
+    monkeypatch.setattr(
+        "promptmetrics.benchmarks.mmmu._get_all_mmmu_configs",
+        lambda: ["Art"],
+    )
+
+    # Create a minimal generations artifact with one item
+    base = (
+        tmp_path
+        / "results"
+        / "mmmu"
+        / "m"
+        / "public-non_official_generation_v1"
+        / "generations"
+    )
+    base.mkdir(parents=True, exist_ok=True)
+    art = base / "20250101T000000Z_generations.json"
+    artifact = {
+        "metadata": {
+            "generation": {
+                "model": "m",
+                "reasoning_model": False,
+                "benchmark": "mmmu",
+                "prompt_source": "non_official_generation_v1",
+                "prompt_source_type": "public",
+                "prompt_file": "prompts/public/mmmu/generation/non_official_generation_v1.txt",
+                "temperature": 0.0,
+                "max_tokens": 128,
+                "generated_at_utc": "t",
+            }
+        },
+        "generations": {"q1": {"response": "Answer: B\nConfidence: 90"}},
+    }
+    art.write_text(json.dumps(artifact, indent=2), encoding="utf-8")
+
+    # Wire up benchmark load_data to include parsed choices
+    monkeypatch.setattr(
+        reval, "get_benchmark_instance", lambda name: MMMUAllBenchmark()
+    )
+    monkeypatch.setattr(
+        MMMUAllBenchmark,
+        "load_data",
+        lambda self, ids_to_load=None, max_samples=None: [
+            {
+                "id": "q1",
+                "question": "Which animal?",
+                "parsed_choices": {"A": "dog", "B": "cat", "C": "bird"},
+                "answer": "B",
+            }
+        ],
+    )
+
+    captured = {"prompt": None}
+
+    class FakeLLM:
+        def __init__(self, model_name):
+            self.supports_reasoning = False
+
+        async def generate_structured(self, prompt, response_model, max_tokens):
+            captured["prompt"] = prompt
+            return OfficialMMMU_V1Evaluation(
+                extracted_answer_choice="B",
+                reasoning="ok",
+                correct="yes",
+                confidence=90,
+            )
+
+    monkeypatch.setattr(reval, "OpenRouterLLM", FakeLLM)
+    monkeypatch.setattr(
+        reval,
+        "tqdm_asyncio",
+        types.SimpleNamespace(gather=lambda *c: reval.asyncio.gather(*c)),
+    )
+
+    def args():
+        class A:
+            pass
+
+        a = A()
+        a.input_file = art
+        a.evaluator_model = "e"
+        a.evaluation_prompt_source = (
+            "official"  # falls back to non_official_evaluation_v1
+        )
+        a.num_workers = 1
+        a.evaluator_max_tokens = 128
+        a.allow_full_run = True
+        return a
+
+    monkeypatch.setattr(
+        reval.argparse.ArgumentParser, "parse_args", lambda self: args()
+    )
+    await reval.main_async()
+
+    assert captured["prompt"] is not None
+    # Ensure the choices are present in the graded prompt
+    assert "(A) dog" in captured["prompt"]
+    assert "(B) cat" in captured["prompt"]
+    assert "(C) bird" in captured["prompt"]
