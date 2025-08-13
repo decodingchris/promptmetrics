@@ -4,12 +4,12 @@ version = "0.1.0"
 description = "A modular toolkit for the rigorous evaluation and metric generation of LLM prompts."
 dependencies = [
     "datasets",
-    "openai",
+    "openai>=1.99.3",
     "python-dotenv",
     "tqdm",
     "Pillow",
-    "pydantic",
-    "httpx",
+    "pydantic>=2.11.7",
+    "httpx>=0.28.1",
     "numpy",
 ]
 readme = "README.md"

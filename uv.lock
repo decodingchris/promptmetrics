@@ -1052,13 +1052,13 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "datasets" },
-    { name = "httpx" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "mypy", marker = "extra == 'dev'" },
     { name = "numpy" },
-    { name = "openai" },
+    { name = "openai", specifier = ">=1.99.3" },
     { name = "pillow" },
     { name = "pre-commit", marker = "extra == 'dev'" },
-    { name = "pydantic" },
+    { name = "pydantic", specifier = ">=2.11.7" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-asyncio", marker = "extra == 'dev'" },
     { name = "pytest-cov", marker = "extra == 'dev'" },

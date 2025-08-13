@@ -37,9 +37,9 @@ This tool is designed for serious prompt engineering research. It allows you to:
     ```
 
 3.  **Create Environment & Install Dependencies:**
-    This single command creates a virtual environment in `.venv` and installs all necessary packages.
+    This single command creates a virtual environment in `.venv` and installs all necessary packages, including development tools.
     ```bash
-    uv sync --dev
+    uv sync --all-extras
     ```
 
 4.  **Set Up Your API Keys:**
@@ -166,6 +166,8 @@ You are a helpful assistant specializing in astrophysics.
 Please answer the following question: {question}
 ```
 You can use any custom prompt by providing the file path to the `--generation_prompt_source` argument.
+
+-   **Structured evaluation portability:** We attempt multiple structured-output strategies (native parsing, JSON Schema constrained responses, and JSON mode). Some evaluator models on OpenRouter may not support these features; in that case PromptMetrics falls back gracefully and suggests compatible evaluators.
 
 #### Running on Full Benchmarks (Safety First)
 

@@ -170,6 +170,11 @@ class MMMUAllBenchmark(MMMUBaseBenchmark):
 
     def get_size(self) -> int:
         """Efficiently gets the total number of samples across all subjects."""
+        # Fail fast with a clear message if no configs are available (e.g., offline with empty cache)
+        if not self.all_configs:
+            raise RuntimeError(
+                "Could not retrieve MMMU subject list. Check network connection."
+            )
         try:
             infos = get_dataset_infos(self.dataset_name)
             return sum(

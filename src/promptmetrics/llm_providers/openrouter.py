@@ -6,8 +6,9 @@ from pathlib import Path
 import httpx
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
-from pydantic import BaseModel
-from typing import Type, TypeVar
+from pydantic import BaseModel, ValidationError
+from typing import Type, TypeVar, Any, cast
+import inspect
 
 load_dotenv()
 logger = logging.getLogger("promptmetrics.llm_providers.openrouter")
@@ -125,6 +126,26 @@ class OpenRouterLLM:
             print(f"\n--- API Error (generate) for model {self.model_name}: {e} ---")
             return {"content": f"API_ERROR: {e}", "reasoning": None}
 
+    def _build_json_schema_response_format(self, response_model: Type[T]) -> dict:
+        """
+        Builds a 'json_schema' response_format payload from a Pydantic v2 model.
+        Compatible with OpenAI-style JSON schema constrained outputs that many
+        OpenRouter-routed models honor.
+        """
+        try:
+            schema = response_model.model_json_schema()
+        except Exception:
+            # Extremely defensive; for BaseModel subclasses this should exist.
+            schema = {"type": "object"}
+        return {
+            "type": "json_schema",
+            "json_schema": {
+                "name": response_model.__name__,
+                "schema": schema,
+                "strict": True,
+            },
+        }
+
     async def generate_structured(
         self, prompt: str, response_model: Type[T], max_tokens: int = 4096
     ) -> T:
@@ -148,6 +169,7 @@ class OpenRouterLLM:
                 max_tokens=max_tokens,
             )
 
+            # Primary path: native Pydantic parsing support in SDK/model
             message = completion.choices[0].message
 
             if message.refusal:
@@ -159,7 +181,10 @@ class OpenRouterLLM:
                 )
                 return response_model(reasoning=reason)
 
-            parsed_response = message.parsed
+            parsed_response = getattr(message, "parsed", None)
+            # Preserve current behavior for portability with tests:
+            # If parsing returned None (not an exception), return the standard error.
+            # We only attempt fallbacks when the parse call throws.
             if not parsed_response:
                 unparsed_content = message.content or ""
                 reason = (
@@ -188,6 +213,121 @@ class OpenRouterLLM:
             return parsed_response
 
         except Exception as e:
+            # Fallback 1: JSON Schema constrained outputs via response_format=json_schema
+            try:
+                rf = self._build_json_schema_response_format(response_model)
+                # Support both awaitable and direct returns (for tests/mocks)
+                res_schema = self.client.chat.completions.create(
+                    model=self.model_name,
+                    messages=cast(Any, [{"role": "user", "content": prompt}]),
+                    response_format=cast(Any, rf),
+                    temperature=0.0,
+                    extra_headers=self.headers,
+                    max_tokens=max_tokens,
+                )
+                if inspect.isawaitable(res_schema):
+                    completion_schema = await cast(Any, res_schema)
+                else:
+                    completion_schema = res_schema  # type: ignore[assignment]
+
+                msg = completion_schema.choices[0].message
+                content = (msg.content or "").strip()
+                try:
+                    parsed = response_model.model_validate_json(content)
+                    logger.info(
+                        json.dumps(
+                            {
+                                "event": "generate_structured_fallback_json_schema_success",
+                                "response": parsed.model_dump(),
+                            }
+                        )
+                    )
+                    return parsed
+                except ValidationError:
+                    try:
+                        parsed = response_model.model_validate(json.loads(content))
+                        logger.info(
+                            json.dumps(
+                                {
+                                    "event": "generate_structured_fallback_json_schema_success_object",
+                                    "response": parsed.model_dump(),
+                                }
+                            )
+                        )
+                        return parsed
+                    except Exception:
+                        pass
+            except Exception as e2:
+                logger.warning(
+                    json.dumps(
+                        {
+                            "event": "generate_structured_fallback_json_schema_error",
+                            "error": str(e2),
+                        }
+                    )
+                )
+
+            # Fallback 2: JSON mode with a short system hint
+            try:
+                rf_json_mode = {"type": "json_object"}
+                # Keep hint short to minimize prompt drift.
+                hint = "Return only a JSON object that matches the requested structure. Do not include any extra text."
+                res_json = self.client.chat.completions.create(
+                    model=self.model_name,
+                    messages=cast(
+                        Any,
+                        [
+                            {"role": "system", "content": hint},
+                            {"role": "user", "content": prompt},
+                        ],
+                    ),
+                    response_format=cast(Any, rf_json_mode),
+                    temperature=0.0,
+                    extra_headers=self.headers,
+                    max_tokens=max_tokens,
+                )
+                if inspect.isawaitable(res_json):
+                    completion_json = await cast(Any, res_json)
+                else:
+                    completion_json = res_json  # type: ignore[assignment]
+                msg = completion_json.choices[0].message
+                content = (msg.content or "").strip()
+                try:
+                    parsed = response_model.model_validate_json(content)
+                    logger.info(
+                        json.dumps(
+                            {
+                                "event": "generate_structured_fallback_json_mode_success",
+                                "response": parsed.model_dump(),
+                            }
+                        )
+                    )
+                    return parsed
+                except ValidationError:
+                    try:
+                        parsed = response_model.model_validate(json.loads(content))
+                        logger.info(
+                            json.dumps(
+                                {
+                                    "event": "generate_structured_fallback_json_mode_success_object",
+                                    "response": parsed.model_dump(),
+                                }
+                            )
+                        )
+                        return parsed
+                    except Exception:
+                        pass
+            except Exception as e3:
+                logger.warning(
+                    json.dumps(
+                        {
+                            "event": "generate_structured_fallback_json_mode_error",
+                            "error": str(e3),
+                        }
+                    )
+                )
+
+            # All strategies failed: preserve the helpful message you already return today.
             error_details = {
                 "event": "generate_structured_error",
                 "error": str(e),
