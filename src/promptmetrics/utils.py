@@ -36,7 +36,13 @@ def load_prompt_template(
         path = Path(prompt_source)
         return path.read_text(encoding="utf-8"), path, "external"
 
-    benchmark_base_name = benchmark_name.split("_")[0]
+    benchmark_base_name = benchmark_name
+    if benchmark_name.startswith("mmmu_"):
+        benchmark_base_name = "mmmu"
+    elif benchmark_name == "aime_2025":
+        benchmark_base_name = "aime"
+    elif benchmark_name == "gpqa_diamond":
+        benchmark_base_name = "gpqa"
 
     prompt_name_with_ext = f"{prompt_source}.txt"
     private_path = (

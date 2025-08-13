@@ -135,7 +135,7 @@ async def test_pm_evaluate_aime_official_fallback_is_advanced(
 
 
 @pytest.mark.asyncio
-async def test_pm_evaluate_aime_custom_prompt_still_advanced(
+async def test_pm_evaluate_aime_custom_prompt_uses_default_verdict(
     aime_generations_artifact, monkeypatch, aime_questions, tmp_path
 ):
     custom_prompt = tmp_path / "custom_eval.txt"
@@ -151,7 +151,9 @@ async def test_pm_evaluate_aime_custom_prompt_still_advanced(
         a = A()
         a.input_file = Path(aime_generations_artifact)
         a.evaluator_model = "eval/m"
-        a.evaluation_prompt_source = str(custom_prompt)  # Still advanced for AIME
+        a.evaluation_prompt_source = str(
+            custom_prompt
+        )  # Custom prompt -> default verdict path
         a.num_workers = 1
         a.evaluator_max_tokens = 256
         a.allow_full_run = True
@@ -175,17 +177,11 @@ async def test_pm_evaluate_aime_custom_prompt_still_advanced(
 
         async def generate_structured(self, prompt, response_model, max_tokens):
             if "2+2" in prompt:
-                return OfficialAIMEEvaluation(
-                    extracted_final_answer="4",
-                    reasoning="OK",
-                    correct="yes",
-                    confidence=90,
+                return reval.EvaluationVerdict(
+                    is_correct=True, extracted_answer="4", reasoning="OK"
                 )
-            return OfficialAIMEEvaluation(
-                extracted_final_answer="4",
-                reasoning="Wrong",
-                correct="no",
-                confidence=60,
+            return reval.EvaluationVerdict(
+                is_correct=False, extracted_answer="4", reasoning="Wrong"
             )
 
     monkeypatch.setattr(reval, "OpenRouterLLM", FakeLLM)
@@ -202,7 +198,9 @@ async def test_pm_evaluate_aime_custom_prompt_still_advanced(
     assert len(files) == 1
     data = json.loads(files[0].read_text(encoding="utf-8"))
     summary = data["summary_metrics"]
-    # Advanced metrics present for AIME even with custom prompt
+    # Default verdict path: accuracy computed, but no CI or ECE present
     assert summary["accuracy"] == 50.0
-    assert "accuracy_ci_95" in summary
-    assert "expected_calibration_error" in summary
+    assert summary["correct_count"] == 1
+    assert summary["total_evaluated"] == 2
+    assert "accuracy_ci_95" not in summary
+    assert "expected_calibration_error" not in summary

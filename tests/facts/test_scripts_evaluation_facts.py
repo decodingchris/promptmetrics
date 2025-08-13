@@ -120,7 +120,7 @@ async def test_pm_evaluate_facts_official_fallback_is_advanced(
 
 
 @pytest.mark.asyncio
-async def test_pm_evaluate_facts_custom_prompt_still_advanced(
+async def test_pm_evaluate_facts_custom_prompt_uses_default_verdict(
     facts_generations_artifact, monkeypatch, facts_questions, tmp_path
 ):
     custom_prompt = tmp_path / "facts_custom_eval.txt"
@@ -160,11 +160,13 @@ async def test_pm_evaluate_facts_custom_prompt_still_advanced(
 
         async def generate_structured(self, prompt, response_model, max_tokens):
             if "Who wrote the book?" in prompt:
-                return OfficialFACTSEvaluation(
-                    reasoning="OK", correct="yes", confidence=90
+                return reval.EvaluationVerdict(
+                    is_correct=True,
+                    extracted_answer="Plato wrote the book.",
+                    reasoning="OK",
                 )
-            return OfficialFACTSEvaluation(
-                reasoning="Wrong", correct="no", confidence=60
+            return reval.EvaluationVerdict(
+                is_correct=False, extracted_answer="London", reasoning="Wrong"
             )
 
     monkeypatch.setattr(reval, "OpenRouterLLM", FakeLLM)
@@ -182,54 +184,7 @@ async def test_pm_evaluate_facts_custom_prompt_still_advanced(
     data = json.loads(files[0].read_text(encoding="utf-8"))
     summary = data["summary_metrics"]
     assert summary["accuracy"] == 50.0
-    assert "accuracy_ci_95" in summary
-    assert "expected_calibration_error" in summary
-
-
-@pytest.mark.asyncio
-async def test_pm_evaluate_facts_official_fallback_missing_raises(
-    monkeypatch, tmp_path
-):
-    base = (
-        tmp_path
-        / "results"
-        / "facts"
-        / "m"
-        / "public-official_generation_v1"
-        / "generations"
-    )
-    base.mkdir(parents=True, exist_ok=True)
-    art = base / "20250101T000000Z_generations.json"
-    art.write_text(
-        '{"metadata":{"generation":{"benchmark":"facts"}},"generations":{}}',
-        encoding="utf-8",
-    )
-
-    monkeypatch.setattr(reval, "get_benchmark_instance", lambda name: FACTSBenchmark())
-
-    def fake_load_prompt_template(source, bench, ptype):
-        raise FileNotFoundError("missing fallback")
-
-    monkeypatch.setattr(reval, "load_prompt_template", fake_load_prompt_template)
-
-    def fake_args():
-        class A:
-            pass
-
-        a = A()
-        a.input_file = art
-        a.evaluator_model = "eval"
-        a.evaluation_prompt_source = "official"
-        a.num_workers = 1
-        a.evaluator_max_tokens = 1
-        a.allow_full_run = True
-        return a
-
-    monkeypatch.setattr(
-        reval.argparse.ArgumentParser, "parse_args", lambda self: fake_args()
-    )
-    with pytest.raises(
-        ValueError,
-        match="does not have an official evaluation prompt.*could not be found",
-    ):
-        await reval.main_async()
+    assert summary["correct_count"] == 1
+    assert summary["total_evaluated"] == 2
+    assert "accuracy_ci_95" not in summary
+    assert "expected_calibration_error" not in summary

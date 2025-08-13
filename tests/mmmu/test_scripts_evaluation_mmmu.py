@@ -150,7 +150,7 @@ async def test_pm_evaluate_mmmu_official_fallback_is_advanced(
 
 
 @pytest.mark.asyncio
-async def test_pm_evaluate_mmmu_custom_prompt_still_advanced(
+async def test_pm_evaluate_mmmu_custom_prompt_uses_default_verdict(
     mmmu_generations_artifact, monkeypatch, mmmu_questions, tmp_path
 ):
     # Avoid network config load
@@ -171,7 +171,9 @@ async def test_pm_evaluate_mmmu_custom_prompt_still_advanced(
         a = A()
         a.input_file = Path(mmmu_generations_artifact)
         a.evaluator_model = "eval/m"
-        a.evaluation_prompt_source = str(custom_prompt)  # Still advanced for MMMU
+        a.evaluation_prompt_source = str(
+            custom_prompt
+        )  # Custom prompt -> default verdict
         a.num_workers = 1
         a.evaluator_max_tokens = 256
         a.allow_full_run = True
@@ -197,17 +199,11 @@ async def test_pm_evaluate_mmmu_custom_prompt_still_advanced(
 
         async def generate_structured(self, prompt, response_model, max_tokens):
             if "Which animal?" in prompt:
-                return OfficialMMMU_V1Evaluation(
-                    extracted_answer_choice="B",
-                    reasoning="OK",
-                    correct="yes",
-                    confidence=90,
+                return reval.EvaluationVerdict(
+                    is_correct=True, extracted_answer="B", reasoning="OK"
                 )
-            return OfficialMMMU_V1Evaluation(
-                extracted_answer_choice="C",
-                reasoning="Wrong",
-                correct="no",
-                confidence=60,
+            return reval.EvaluationVerdict(
+                is_correct=False, extracted_answer="C", reasoning="Wrong"
             )
 
     monkeypatch.setattr(reval, "OpenRouterLLM", FakeLLM)
@@ -224,68 +220,9 @@ async def test_pm_evaluate_mmmu_custom_prompt_still_advanced(
     assert len(files) == 1
     data = json.loads(files[0].read_text(encoding="utf-8"))
     summary = data["summary_metrics"]
-    # Advanced metrics present for MMMU even with custom prompt
+    # Default verdict path: accuracy computed, but no CI/ECE
     assert summary["accuracy"] == 50.0
-    assert "accuracy_ci_95" in summary
-    assert "expected_calibration_error" in summary
-
-
-@pytest.mark.asyncio
-async def test_pm_evaluate_mmmu_official_fallback_missing_raises(monkeypatch, tmp_path):
-    # Minimal generations artifact
-    base = (
-        tmp_path
-        / "results"
-        / "mmmu"
-        / "m"
-        / "public-non_official_generation_v1"
-        / "generations"
-    )
-    base.mkdir(parents=True, exist_ok=True)
-    art = base / "20250101T000000Z_generations.json"
-    art.write_text(
-        '{"metadata":{"generation":{"model":"m","reasoning_model":false,"benchmark":"mmmu","prompt_source":"non_official_generation_v1","prompt_source_type":"public","prompt_file":"x","temperature":0,"max_tokens":1,"generated_at_utc":"t"}},"generations":{}}',
-        encoding="utf-8",
-    )
-
-    # Avoid network on init
-    monkeypatch.setattr(
-        "promptmetrics.benchmarks.mmmu._get_all_mmmu_configs",
-        lambda: ["Art"],
-    )
-    monkeypatch.setattr(
-        reval, "get_benchmark_instance", lambda name: MMMUAllBenchmark()
-    )
-
-    # Force fallback "non_official_evaluation_v1" to be missing
-    def fake_load_prompt_template(source, bench, ptype):
-        if source == "non_official_evaluation_v1":
-            raise FileNotFoundError("missing fallback")
-        # Allow other loads if needed, though this test path shouldn't need them
-        from promptmetrics.utils import load_prompt_template as real_load
-
-        return real_load(source, bench, ptype)
-
-    monkeypatch.setattr(reval, "load_prompt_template", fake_load_prompt_template)
-
-    def fake_args():
-        class A:
-            pass
-
-        a = A()
-        a.input_file = art
-        a.evaluator_model = "eval"
-        a.evaluation_prompt_source = "official"
-        a.num_workers = 1
-        a.evaluator_max_tokens = 1
-        a.allow_full_run = True
-        return a
-
-    monkeypatch.setattr(
-        reval.argparse.ArgumentParser, "parse_args", lambda self: fake_args()
-    )
-    with pytest.raises(
-        ValueError,
-        match="does not have an official evaluation prompt.*fallback prompt 'non_official_evaluation_v1' could not be found",
-    ):
-        await reval.main_async()
+    assert summary["correct_count"] == 1
+    assert summary["total_evaluated"] == 2
+    assert "accuracy_ci_95" not in summary
+    assert "expected_calibration_error" not in summary

@@ -151,7 +151,7 @@ async def test_pm_evaluate_gpqa_official_fallback_still_advanced(
 
 
 @pytest.mark.asyncio
-async def test_pm_evaluate_gpqa_custom_prompt_still_advanced(
+async def test_pm_evaluate_gpqa_custom_prompt_uses_default_verdict(
     gpqa_generations_artifact, monkeypatch, gpqa_questions, tmp_path
 ):
     custom_prompt = tmp_path / "custom_eval.txt"
@@ -193,17 +193,11 @@ async def test_pm_evaluate_gpqa_custom_prompt_still_advanced(
 
         async def generate_structured(self, prompt, response_model, max_tokens):
             if " :: B" in prompt or "Mars" in prompt:
-                return OfficialGPQAEvaluation(
-                    extracted_answer_choice="B",
-                    reasoning="OK",
-                    correct="yes",
-                    confidence=90,
+                return reval.EvaluationVerdict(
+                    is_correct=True, extracted_answer="B", reasoning="OK"
                 )
-            return OfficialGPQAEvaluation(
-                extracted_answer_choice="D",
-                reasoning="Wrong",
-                correct="no",
-                confidence=60,
+            return reval.EvaluationVerdict(
+                is_correct=False, extracted_answer="D", reasoning="Wrong"
             )
 
     monkeypatch.setattr(reval, "OpenRouterLLM", FakeLLM)
@@ -221,5 +215,7 @@ async def test_pm_evaluate_gpqa_custom_prompt_still_advanced(
     data = json.loads(files[0].read_text(encoding="utf-8"))
     summary = data["summary_metrics"]
     assert summary["accuracy"] == 50.0
-    assert "accuracy_ci_95" in summary
-    assert "expected_calibration_error" in summary
+    assert summary["correct_count"] == 1
+    assert summary["total_evaluated"] == 2
+    assert "accuracy_ci_95" not in summary
+    assert "expected_calibration_error" not in summary

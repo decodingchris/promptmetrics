@@ -148,14 +148,17 @@ async def main_async():
     loaded_questions = benchmark.load_data(ids_to_load=required_ids)
     questions_map = {q["id"]: q for q in loaded_questions}
 
-    # Enable advanced evaluation only if:
-    #  - The benchmark has a specialized verdict model, AND
-    #  - EITHER no official evaluation prompt name is defined (e.g., GPQA),
-    #    OR the resolved prompt is exactly that official prompt.
     resolved_eval_prompt_stem = Path(evaluation_prompt_path).stem
-    supports_advanced_evaluation = benchmark.official_evaluation_model is not None and (
+    is_official_prompt = (
+        resolved_eval_prompt_stem == benchmark.official_evaluation_prompt_name
+    )
+    is_official_fallback = (
         benchmark.official_evaluation_prompt_name is None
-        or resolved_eval_prompt_stem == benchmark.official_evaluation_prompt_name
+        and resolved_eval_prompt_stem == "non_official_evaluation_v1"
+    )
+
+    supports_advanced_evaluation = benchmark.official_evaluation_model is not None and (
+        is_official_prompt or is_official_fallback
     )
 
     if supports_advanced_evaluation:
