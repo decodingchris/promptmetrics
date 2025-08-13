@@ -150,9 +150,9 @@ async def main_async():
         relative = experiment_dir.relative_to(results_root)
         log_dir = results_root.parent / "logs" / relative / "evaluation"
     else:
-        # Fallback to previous behavior if 'results' segment is not found
-        log_base_str = str(experiment_dir).replace("results", "logs", 1)
-        log_dir = Path(log_base_str) / "evaluation"
+        # Robust fallback: create logs alongside the experiment directory
+        # Example: <parent>/logs/<experiment_dir_name>/evaluation
+        log_dir = experiment_dir.parent / "logs" / experiment_dir.name / "evaluation"
     setup_logger(log_dir, f"{timestamp}_evaluation.log")
 
     evaluator_llm = OpenRouterLLM(model_name=args.evaluator_model)

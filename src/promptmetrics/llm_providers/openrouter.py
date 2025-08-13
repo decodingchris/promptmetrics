@@ -39,7 +39,7 @@ def get_model_details():
         cache_payload = {"timestamp": time.time(), "models": models_map}
         cache_file.write_text(json.dumps(cache_payload, indent=2))
         return models_map
-    except (httpx.RequestError, json.JSONDecodeError) as e:
+    except (httpx.RequestError, json.JSONDecodeError, ValueError) as e:
         logger.error(f"Failed to fetch/cache model details from OpenRouter: {e}")
         return {}
 

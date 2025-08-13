@@ -10,7 +10,7 @@ Your evaluation must be in the format and criteria specified below:
 
 extracted_answer_choice: Extract the single capital letter (A-J) corresponding to the final answer from the [response]. If no clear choice is made, put 'None'.
 
-[correct_answer_letter]: {answer}
+[correct_answer_letter]: {correct_answer_letter}
 
 reasoning: Explain why the extracted_answer_choice is correct or incorrect by comparing it to the [correct_answer_letter]. Focus only on whether the chosen letter matches the correct letter. Do not comment on the reasoning within the model's response.
 
