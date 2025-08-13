@@ -10,6 +10,23 @@ from promptmetrics.benchmarks.hle import OfficialHLEEvaluation
 # --- Core Value: Robust LLM client with caching, vision/reasoning detection, and structured parsing ---
 
 
+def test_openrouterllm_no_fetch_on_init_by_default(monkeypatch):
+    # Ensure that constructing OpenRouterLLM does not fetch model details by default
+    # (i.e., no network call on init).
+    import promptmetrics.llm_providers.openrouter as orouter
+
+    # Ensure no cached models and force get_model_details to raise if called
+    monkeypatch.setattr(OpenRouterLLM, "MODELS_CACHE", {})
+    monkeypatch.setattr(
+        orouter,
+        "get_model_details",
+        lambda: (_ for _ in ()).throw(RuntimeError("should not be called")),
+    )
+
+    c = OpenRouterLLM("unit-test")
+    assert c.supports_vision is False and c.supports_reasoning is False
+
+
 def test_get_model_details_caches_and_reads(monkeypatch, tmp_path):
     # Redirect cache directory to tmp
     monkeypatch.setattr(orouter.Path, "home", lambda: tmp_path)

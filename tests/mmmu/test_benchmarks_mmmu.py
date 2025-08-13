@@ -311,6 +311,49 @@ def test_adapt_mmmu_sample_parsing_failure():
     assert out["parsed_choices"] == {}
 
 
+def test_adapt_mmmu_sample_parsing_failure_no_id():
+    # Ensure logging code path doesn't crash when id is missing
+    sample = {"question": "Q", "options": "not-a-list", "answer": "A"}
+    out = _adapt_mmmu_sample(sample)
+    assert out["parsed_choices"] == {}
+
+
+def test_mmmu_single_ids_to_load_early_stop(monkeypatch):
+    # Validate that ids_to_load selection stops early once all IDs are found
+    iter_count = {"n": 0}
+
+    class FakeIterableDataset:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def map(self, fn):
+            mapped = [fn(dict(r)) for r in self._rows]
+            return FakeIterableDataset(mapped)
+
+        def __iter__(self):
+            for r in self._rows:
+                iter_count["n"] += 1
+                yield r
+
+    # Build a larger stream; the first match is near the beginning
+    rows = [
+        {"id": f"s{i}", "question": "Q", "options": "['a','b']", "answer": "A"}
+        for i in range(1000)
+    ]
+
+    def fake_load_dataset(path, name=None, split=None, streaming=False):
+        assert streaming is True
+        return FakeIterableDataset(rows)
+
+    monkeypatch.setattr("promptmetrics.benchmarks.mmmu.load_dataset", fake_load_dataset)
+
+    b = MMMUSingleBenchmark("Art")
+    # Request a single early ID; iterator should break soon after finding it
+    out = b.load_data(ids_to_load=["s1"])
+    assert [s["id"] for s in out] == ["s1"]
+    assert iter_count["n"] < 50  # should not consume the whole stream
+
+
 def test_mmmu_all_full_run_streaming_no_concatenate(monkeypatch):
     # Ensure deterministic subject list
     monkeypatch.setattr(

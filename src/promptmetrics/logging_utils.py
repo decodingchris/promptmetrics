@@ -1,6 +1,7 @@
 import logging
 import sys
 from pathlib import Path
+from typing import List
 
 
 def setup_logger(log_dir: Path, filename: str):
@@ -11,8 +12,16 @@ def setup_logger(log_dir: Path, filename: str):
     logger = logging.getLogger("promptmetrics")
     logger.setLevel(logging.INFO)
 
+    # Close and remove any existing handlers to avoid file descriptor leaks.
     if logger.hasHandlers():
-        logger.handlers.clear()
+        # Work on a copy since we'll mutate the list.
+        existing_handlers: List[logging.Handler] = logger.handlers[:]
+        for h in existing_handlers:
+            try:
+                h.close()
+            except Exception:
+                pass
+            logger.removeHandler(h)
 
     file_handler = logging.FileHandler(log_filepath, encoding="utf-8")
     file_formatter = logging.Formatter(
