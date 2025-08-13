@@ -162,3 +162,20 @@ def test_get_size_quick_path_success(monkeypatch):
         "promptmetrics.benchmarks.hle.get_dataset_infos", lambda *a, **k: fake_infos
     )
     assert b.get_size() == 123
+
+
+def test_format_prompt_messages_accepts_pil_image():
+    from PIL import Image
+
+    b = HLEBenchmark()
+    prompt_template = "---[USER]---\n{question}"
+    q = {"id": "x", "question": "What is shown?", "answer": "a"}
+    q["image"] = Image.new("RGB", (2, 2), color="red")
+    msgs = b.format_prompt_messages(q, prompt_template)
+    user_msg = next(m for m in msgs if m["role"] == "user")
+    content = user_msg["content"]
+    assert any(
+        p.get("type") == "image_url"
+        and p["image_url"]["url"].startswith("data:image/png;base64,")
+        for p in content
+    )

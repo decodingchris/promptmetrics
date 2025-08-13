@@ -4,8 +4,10 @@ from datasets import load_dataset, get_dataset_infos
 from huggingface_hub.errors import HfHubHTTPError
 from typing import Dict, Any, List, Type, Literal
 from pydantic import BaseModel, Field
+from PIL import Image
 from .base import BaseBenchmark, MessageContentType
 from dotenv import load_dotenv
+from ..utils import pil_to_base64_url
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -129,9 +131,16 @@ class HLEBenchmark(BaseBenchmark):
             {"type": "text", "text": formatted_user_text}
         ]
 
-        if question.get("image"):
+        # Accept either a URL string (current behavior) or a PIL.Image (robustness)
+        image_obj = question.get("image")
+        if isinstance(image_obj, Image.Image):
+            image_data_url = pil_to_base64_url(image_obj)
             user_content_list.append(
-                {"type": "image_url", "image_url": {"url": question["image"]}}
+                {"type": "image_url", "image_url": {"url": image_data_url}}
+            )
+        elif isinstance(image_obj, str) and image_obj:
+            user_content_list.append(
+                {"type": "image_url", "image_url": {"url": image_obj}}
             )
 
         messages.append({"role": "user", "content": user_content_list})
