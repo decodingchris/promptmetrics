@@ -1,0 +1,11 @@
+---[SYSTEM]---
+{system_instruction}
+
+---[USER]---
+Here is the user request and the document to use for your answer.
+
+[USER REQUEST]:
+{user_request}
+
+[CONTEXT DOCUMENT]:
+{context_document}

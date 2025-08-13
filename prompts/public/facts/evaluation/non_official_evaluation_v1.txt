@@ -1,0 +1,16 @@
+Evaluate whether the [response] is factually accurate and fully grounded in the provided [context_document], based on the [user_request].
+
+[user_request]: {user_request}
+
+[context_document]:
+{context_document}
+
+[response]: {model_response}
+
+Your evaluation must be in the format and criteria specified below:
+
+reasoning: Explain, step-by-step, whether all claims in the [response] are fully supported by the [context_document]. Note any claims that are unsupported, contradict the document, or introduce outside information not present in the document.
+
+correct: Answer 'yes' if every factual claim in the response is fully supported by information present in the [context_document]. Answer 'no' if any claim is unsupported, contradicts the document, or relies on external knowledge not found in the document.
+
+confidence: The extracted confidence score between 0% and 100% from [response]. Put 100 if there is no confidence score available.

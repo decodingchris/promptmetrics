@@ -4,7 +4,7 @@ A modular toolkit for the rigorous evaluation and metric generation of LLM promp
 
 ---
 
-`PromptMetrics` is a professional-grade Python toolkit for the rigorous evaluation of Large Language Model (LLM) prompts. It provides a flexible, reproducible, and cost-effective framework for measuring prompt performance against academic benchmarks like **[AIME 2025](https://huggingface.co/datasets/yentinglin/aime_2025)**, **[GPQA](https://huggingface.co/datasets/idavidrein/gpqa)**, **[Humanity's Last Exam (HLE)](https://huggingface.co/datasets/cais/hle)**, and the comprehensive **[MMMU](https://huggingface.co/datasets/MMMU/MMMU)** benchmark, including full support for multi-modal (vision) questions where applicable.
+`PromptMetrics` is a professional-grade Python toolkit for the rigorous evaluation of Large Language Model (LLM) prompts. It provides a flexible, reproducible, and cost-effective framework for measuring prompt performance against academic benchmarks like **[AIME 2025](https://huggingface.co/datasets/yentinglin/aime_2025)**, **[FACTS Grounding](https://huggingface.co/datasets/google/FACTS-grounding-public)**, **[GPQA](https://huggingface.co/datasets/idavidrein/gpqa)**, **[Humanity's Last Exam (HLE)](https://huggingface.co/datasets/cais/hle)**, and the comprehensive **[MMMU](https://huggingface.co/datasets/MMMU/MMMU)** benchmark, including full support for multi-modal (vision) questions where applicable.
 
 This tool is designed for serious prompt engineering research. It allows you to:
 -   **Test any prompt** against standardized, version-controlled datasets, including vision benchmarks.
@@ -82,16 +82,25 @@ uv run pm-generate \
   --generation_prompt_source "official" \
   --max_samples 5
 ```
-**Example 3: Running the AIME 2025 mathematical reasoning benchmark**
+**Example 3: Running the long-context FACTS Grounding benchmark**
 ```bash
 uv run pm-generate \
-  --model "anthropic/claude-3-sonnet-3.5-20240620" \
+  --model "anthropic/claude-3.5-sonnet-3.5-20240620" \
+  --benchmark "facts" \
+  --generation_prompt_source "official" \
+  --max_samples 3
+```
+
+**Example 4: Running the AIME 2025 mathematical reasoning benchmark**
+```bash
+uv run pm-generate \
+  --model "anthropic/claude-3.5-sonnet-3.5-20240620" \
   --benchmark "aime_2025" \
   --generation_prompt_source "official" \
   --max_samples 3
 ```
 
-**Example 4: Running the full, multi-subject MMMU benchmark**
+**Example 5: Running the full, multi-subject MMMU benchmark**
 This command runs the entire MMMU benchmark, which includes questions from all 30 of its subjects.
 ```bash
 uv run pm-generate \
@@ -101,7 +110,7 @@ uv run pm-generate \
   --max_samples 10
 ```
 
-**Example 5: Running a single subject from the MMMU benchmark**
+**Example 6: Running a single subject from the MMMU benchmark**
 For faster, targeted tests, you can run on a single subject like "Art" or "Computer_Science".
 ```bash
 uv run pm-generate \
@@ -197,7 +206,7 @@ uv run pm-evaluate \
 
 **2. Get Advanced Metrics:** When an evaluation uses the benchmark's specialized Pydantic model for grading, the final output will include advanced metrics like **Expected Calibration Error (ECE)**. This is automatically triggered when using an official evaluation prompt.
 
-**Crucially, this also works for benchmarks like GPQA and MMMU that do not have an *official* evaluation prompt.** When you use `--evaluation_prompt_source "official"`, `PromptMetrics` intelligently falls back to a compatible, high-quality community prompt (`non_official_evaluation_v1.txt`) while still using the benchmark's specialized Pydantic model (`OfficialGPQAEvaluation` or `OfficialMMMU_V1Evaluation`). This ensures you get advanced metrics even when an official grading prompt isn't published.
+**Crucially, this also works for benchmarks like FACTS, GPQA, and MMMU that do not have an *official* evaluation prompt.** When you use `--evaluation_prompt_source "official"`, `PromptMetrics` intelligently falls back to a compatible, high-quality community prompt (`non_official_evaluation_v1.txt`) while still using the benchmark's specialized Pydantic model (`OfficialFACTSEvaluation`, `OfficialGPQAEvaluation`, or `OfficialMMMU_V1Evaluation`). This ensures you get advanced metrics even when an official grading prompt isn't published.
 ```
 --- Final Score ---
 Model: openai/gpt-4o
