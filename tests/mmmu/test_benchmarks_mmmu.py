@@ -321,13 +321,15 @@ def test_mmmu_all_full_run_streaming_no_concatenate(monkeypatch):
     # Make any attempt to call concatenate_datasets fail to prove we avoided it
     import promptmetrics.benchmarks.mmmu as mmmu_mod
 
-    monkeypatch.setattr(
-        mmmu_mod,
-        "concatenate_datasets",
-        lambda *a, **k: (_ for _ in ()).throw(
-            AssertionError("should not use concatenate_datasets")
-        ),
-    )
+    # If present, force it to fail if called; if absent, that already guarantees it won't be used.
+    if hasattr(mmmu_mod, "concatenate_datasets"):
+        monkeypatch.setattr(
+            mmmu_mod,
+            "concatenate_datasets",
+            lambda *a, **k: (_ for _ in ()).throw(
+                AssertionError("should not use concatenate_datasets")
+            ),
+        )
 
     class FakeIterableDataset:
         def __init__(self, rows):
