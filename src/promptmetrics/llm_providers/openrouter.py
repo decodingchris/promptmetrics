@@ -47,7 +47,8 @@ def get_model_details():
 class OpenRouterLLM:
     """An asynchronous client for all OpenRouter API interactions."""
 
-    MODELS_CACHE = get_model_details()
+    # Avoid network on import; can be lazily populated if desired.
+    MODELS_CACHE: dict[str, dict] = {}
 
     def __init__(self, model_name: str):
         self.model_name = model_name
@@ -69,6 +70,19 @@ class OpenRouterLLM:
             ),
             "X-Title": os.getenv("YOUR_APP_NAME", "PromptMetrics"),
         }
+
+        # Optional lazy fetch of model details, controlled via env flag.
+        # Default: do not fetch on init to avoid network during construction.
+        if (
+            not self.MODELS_CACHE
+            and os.getenv("OPENROUTER_FETCH_MODELS_ON_INIT") == "1"
+        ):
+            try:
+                self.MODELS_CACHE = get_model_details()
+            except Exception as e:
+                logger.warning(
+                    "Skipping model details fetch on init due to error: %s", e
+                )
 
         model_info = self.MODELS_CACHE.get(model_name)
         self.supports_vision = False
@@ -123,7 +137,6 @@ class OpenRouterLLM:
             logger.error(
                 json.dumps({"event": "generate_response_error", "error": str(e)})
             )
-            print(f"\n--- API Error (generate) for model {self.model_name}: {e} ---")
             return {"content": f"API_ERROR: {e}", "reasoning": None}
 
     def _build_json_schema_response_format(self, response_model: Type[T]) -> dict:
@@ -339,8 +352,5 @@ class OpenRouterLLM:
                 f"Evaluator API call failed with a '{type(e).__name__}'. This can happen if the evaluator model "
                 f"('{self.model_name}') does not support structured outputs. Try a different --evaluator_model, "
                 f"like 'mistralai/mistral-small-3.2-24b-instruct'. Original error: {e}"
-            )
-            print(
-                f"\n--- Evaluator API Error (generate_structured) for model {self.model_name}: {helpful_reason} ---"
             )
             return response_model(reasoning=helpful_reason)

@@ -67,7 +67,9 @@ def _adapt_mmmu_sample(example: Dict[str, Any]) -> Dict[str, Any]:
                 chr(65 + i): opt for i, opt in enumerate(options_list)
             }
         except (ValueError, SyntaxError):
-            logger.warning(f"Could not parse options for sample {example['id']}")
+            logger.warning(
+                f"Could not parse options for sample {example.get('id', '[unknown]')}"
+            )
             example["parsed_choices"] = {}
     return example
 
@@ -303,11 +305,15 @@ class MMMUSingleBenchmark(MMMUBaseBenchmark):
 
         # ids_to_load is much less common here but supported for consistency
         if ids_to_load:
-            samples = []
+            samples: List[Dict[str, Any]] = []
             ids_set = set(ids_to_load)
             for sample in dataset:
-                if sample["id"] in ids_set:
+                sid = sample.get("id")
+                if sid in ids_set:
                     samples.append(sample)
+                    ids_set.remove(sid)
+                    if not ids_set:
+                        break  # Early stop when all requested IDs have been found
             return samples
 
         if max_samples:
