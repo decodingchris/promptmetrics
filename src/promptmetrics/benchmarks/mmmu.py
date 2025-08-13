@@ -1,4 +1,9 @@
-# src/promptmetrics/benchmarks/mmmu.py
+"""MMMU benchmark integration (full and per-subject).
+
+Provides shared utilities and two concrete benchmark classes:
+  - MMMUAllBenchmark: iterate across all subjects
+  - MMMUSingleBenchmark: a single subject by config name
+"""
 
 import logging
 import re
@@ -21,8 +26,7 @@ logger = logging.getLogger(__name__)
 
 class OfficialMMMU_V1Evaluation(BaseModel):
     """
-    Pydantic model for the structured output of the MMMU evaluation prompt.
-    Supports up to 10 choices (A-J).
+    Structured evaluation verdict for MMMU (supports up to 10 choices A–J).
     """
 
     extracted_answer_choice: (
@@ -34,7 +38,10 @@ class OfficialMMMU_V1Evaluation(BaseModel):
 
 
 def _get_all_mmmu_configs() -> List[str]:
-    """Helper to get all valid MMMU configuration names from the Hub, with local caching."""
+    """Return all valid MMMU configuration names from the Hub with local caching.
+
+    Uses a simple JSON cache under ~/.cache/promptmetrics with a 24-hour TTL.
+    """
     cache_dir = Path.home() / ".cache" / "promptmetrics"
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_file = cache_dir / "mmmu_configs.json"
@@ -59,7 +66,7 @@ def _get_all_mmmu_configs() -> List[str]:
 
 
 def _adapt_mmmu_sample(example: Dict[str, Any]) -> Dict[str, Any]:
-    """Shared function to parse and adapt a single MMMU sample."""
+    """Parse option strings into a choices dict for a single MMMU sample."""
     if isinstance(example.get("options"), str):
         try:
             options_list = ast.literal_eval(example["options"])
@@ -76,7 +83,7 @@ def _adapt_mmmu_sample(example: Dict[str, Any]) -> Dict[str, Any]:
 
 class MMMUBaseBenchmark(BaseBenchmark):
     """
-    A base class for MMMU benchmarks containing shared logic for formatting and properties.
+    Base class for MMMU benchmarks with common formatting and properties.
     """
 
     dataset_name = "MMMU/MMMU"
@@ -105,6 +112,7 @@ class MMMUBaseBenchmark(BaseBenchmark):
     def format_prompt_messages(
         self, question: Dict[str, Any], prompt_template: str
     ) -> List[Dict[str, MessageContentType]]:
+        """Render an MMMU sample (text + optional images) into chat messages."""
         # Dynamically build the choices block for the prompt.
         choices_list = []
         if "parsed_choices" in question:
@@ -158,8 +166,7 @@ class MMMUBaseBenchmark(BaseBenchmark):
 
 class MMMUAllBenchmark(MMMUBaseBenchmark):
     """
-    Implementation for the full MMMU benchmark, combining all 30 subjects.
-    This is triggered by using the benchmark name 'mmmu'.
+    Full MMMU benchmark across all subjects (benchmark name 'mmmu').
     """
 
     def __init__(self):
@@ -171,7 +178,7 @@ class MMMUAllBenchmark(MMMUBaseBenchmark):
         return self._name
 
     def get_size(self) -> int:
-        """Efficiently gets the total number of samples across all subjects."""
+        """Return the total number of samples across all subjects."""
         # Fail fast with a clear message if no configs are available (e.g., offline with empty cache)
         if not self.all_configs:
             raise RuntimeError(
@@ -264,8 +271,7 @@ class MMMUAllBenchmark(MMMUBaseBenchmark):
 
 class MMMUSingleBenchmark(MMMUBaseBenchmark):
     """
-    Implementation for a single subject of the MMMU benchmark.
-    This is triggered by using a benchmark name like 'mmmu_art'.
+    Single subject of the MMMU benchmark (benchmark names like 'mmmu_art').
     """
 
     def __init__(self, config_name: str):
@@ -277,7 +283,7 @@ class MMMUSingleBenchmark(MMMUBaseBenchmark):
         return self._name
 
     def get_size(self) -> int:
-        """Efficiently gets the total number of samples in the dataset split."""
+        """Return the total number of samples in the configured split."""
         try:
             infos = get_dataset_infos(self.dataset_name)
             return infos[self.dataset_config].splits[self.dataset_split].num_examples
@@ -303,7 +309,7 @@ class MMMUSingleBenchmark(MMMUBaseBenchmark):
         )
         dataset = dataset.map(_adapt_mmmu_sample)
 
-        # ids_to_load is much less common here but supported for consistency
+        # ids_to_load is less common here but supported for consistency.
         if ids_to_load:
             samples: List[Dict[str, Any]] = []
             ids_set = set(ids_to_load)

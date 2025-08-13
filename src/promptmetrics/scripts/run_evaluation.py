@@ -1,3 +1,5 @@
+"""Evaluate generated model outputs with an evaluator LLM and produce metrics."""
+
 import argparse
 import asyncio
 import datetime
@@ -19,12 +21,15 @@ from promptmetrics.utils import load_prompt_template
 
 
 class EvaluationVerdict(BaseModel):
+    """Default (generic) evaluation verdict when no specialized model is in use."""
+
     is_correct: bool | None = None
     extracted_answer: str | None = None
     reasoning: str
 
 
 def calculate_ece(confidence: np.ndarray, correct: np.ndarray, n_bins=10) -> float:
+    """Compute Expected Calibration Error (ECE) using equal-width bins in [0,1]."""
     if len(confidence) == 0:
         return 0.0
     bin_boundaries = np.linspace(0, 1, n_bins + 1)
@@ -46,6 +51,7 @@ def calculate_ece(confidence: np.ndarray, correct: np.ndarray, n_bins=10) -> flo
 
 
 async def main_async():
+    """Async entrypoint for pm-evaluate CLI."""
     parser = argparse.ArgumentParser(
         description="Evaluate model responses and save a complete artifact with summary metrics."
     )

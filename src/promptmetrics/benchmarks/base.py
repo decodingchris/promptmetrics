@@ -1,3 +1,5 @@
+"""Abstract interfaces and shared typing for PromptMetrics benchmarks."""
+
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Union, Type
 from pydantic import BaseModel
@@ -17,37 +19,37 @@ class BaseBenchmark(ABC):
     @property
     @abstractmethod
     def name(self) -> str:
-        """The canonical, lower-case name of the benchmark."""
+        """Canonical, lower-case name of the benchmark."""
         pass
 
     @property
     @abstractmethod
     def answer_key(self) -> str:
-        """The key in the dataset dictionary that holds the correct answer."""
+        """Dataset field that contains the correct answer for grading."""
         pass
 
     @property
     @abstractmethod
     def official_generation_prompt_name(self) -> str | None:
-        """The filename stem of the official generation prompt, if one exists."""
+        """Filename stem for the benchmark's official generation prompt, if any."""
         pass
 
     @property
     @abstractmethod
     def official_evaluation_prompt_name(self) -> str | None:
-        """The filename stem of the official evaluation prompt, if one exists."""
+        """Filename stem for the benchmark's official evaluation prompt, if any."""
         pass
 
     @property
     @abstractmethod
     def official_evaluation_model(self) -> Type[BaseModel] | None:
-        """The Pydantic model for parsing official evaluation verdicts."""
+        """Pydantic model used to parse structured evaluation outputs, if supported."""
         pass
 
     @property
     @abstractmethod
     def is_multimodal(self) -> bool:
-        """Indicates if the benchmark contains multi-modal content (e.g., images)."""
+        """True if any sample can contain non-text content (e.g., images)."""
         pass
 
     @abstractmethod
@@ -57,16 +59,17 @@ class BaseBenchmark(ABC):
         ids_to_load: List[str] | None = None,
     ) -> List[Dict[str, Any]]:
         """
-        Loads the dataset for the benchmark.
+        Load and adapt dataset samples for this benchmark.
 
-        This method should prioritize `ids_to_load` over `max_samples` if both are provided.
+        Implementations should prioritize ids_to_load over max_samples when both
+        are provided.
 
         Args:
-            max_samples: The maximum number of samples to load. If None, load all.
-            ids_to_load: A specific list of sample IDs to load.
+            max_samples: Optional upper bound on number of samples to return.
+            ids_to_load: Optional list of exact sample IDs to return.
 
         Returns:
-            A list of question dictionaries.
+            List of adapted sample dictionaries (each must include a string 'id').
         """
         pass
 
@@ -75,13 +78,15 @@ class BaseBenchmark(ABC):
         self, question: Dict[str, Any], prompt_template: str
     ) -> List[Dict[str, MessageContentType]]:
         """
-        Formats a single question into a list of messages for an LLM.
+        Format a single adapted sample into chat messages for an LLM API.
 
         Args:
-            question: A dictionary representing a single question from the dataset.
-            prompt_template: The string template to be filled.
+            question: Single adapted sample from load_data().
+            prompt_template: Raw prompt template content (possibly with ---[SYSTEM]---
+                and ---[USER]--- markers).
 
         Returns:
-            A list of message dictionaries ready for an LLM API call.
+            Chat messages in OpenAI-compatible format. For multimodal benchmarks,
+            the user 'content' may be a list containing both text and image parts.
         """
         pass

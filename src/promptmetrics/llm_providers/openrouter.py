@@ -1,3 +1,14 @@
+"""Asynchronous client wrapper for OpenRouter-compatible chat models.
+
+Features:
+  - Local model metadata caching (vision/reasoning capabilities)
+  - Basic text generation
+  - Structured output generation with robust fallbacks:
+      1) Native Pydantic parsing (SDK support)
+      2) JSON Schema constrained outputs
+      3) JSON mode with a minimal system hint
+"""
+
 import os
 import logging
 import json
@@ -17,7 +28,11 @@ T = TypeVar("T", bound=BaseModel)
 
 
 def get_model_details():
-    """Fetches model details from OpenRouter, with local caching."""
+    """Fetch model details from OpenRouter with a simple local JSON cache.
+
+    Returns:
+        A mapping from model id to metadata (may be empty on error).
+    """
     cache_dir = Path.home() / ".cache" / "promptmetrics"
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_file = cache_dir / "openrouter_models.json"
@@ -45,12 +60,13 @@ def get_model_details():
 
 
 class OpenRouterLLM:
-    """An asynchronous client for all OpenRouter API interactions."""
+    """Asynchronous client for OpenRouter API interactions."""
 
     # Avoid network on import; can be lazily populated if desired.
     MODELS_CACHE: dict[str, dict] = {}
 
     def __init__(self, model_name: str):
+        """Create a client for a specific model id."""
         self.model_name = model_name
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
@@ -101,6 +117,7 @@ class OpenRouterLLM:
     async def generate(
         self, messages: list, temperature: float = 0.0, max_tokens: int = 8192
     ) -> dict:
+        """Generate a plain-text completion from chat messages."""
         log_payload = {
             "model": self.model_name,
             "messages": messages,
@@ -141,9 +158,9 @@ class OpenRouterLLM:
 
     def _build_json_schema_response_format(self, response_model: Type[T]) -> dict:
         """
-        Builds a 'json_schema' response_format payload from a Pydantic v2 model.
-        Compatible with OpenAI-style JSON schema constrained outputs that many
-        OpenRouter-routed models honor.
+        Build a response_format payload (json_schema) for constrained JSON outputs.
+
+        Compatible with OpenAI-style JSON Schema that many OpenRouter models honor.
         """
         try:
             schema = response_model.model_json_schema()
@@ -162,6 +179,7 @@ class OpenRouterLLM:
     async def generate_structured(
         self, prompt: str, response_model: Type[T], max_tokens: int = 4096
     ) -> T:
+        """Generate a structured response parsed as response_model with fallbacks."""
         log_payload = {
             "model": self.model_name,
             "prompt": prompt,
