@@ -140,8 +140,19 @@ async def main_async():
                     f"and the fallback prompt '{fallback_prompt_name}' could not be found."
                 )
 
-    log_base_str = str(args.input_file.parent.parent).replace("results", "logs", 1)
-    log_dir = Path(log_base_str) / "evaluation"
+    experiment_dir = args.input_file.parent.parent
+    results_root = None
+    for ancestor in experiment_dir.parents:
+        if ancestor.name == "results":
+            results_root = ancestor
+            break
+    if results_root:
+        relative = experiment_dir.relative_to(results_root)
+        log_dir = results_root.parent / "logs" / relative / "evaluation"
+    else:
+        # Fallback to previous behavior if 'results' segment is not found
+        log_base_str = str(experiment_dir).replace("results", "logs", 1)
+        log_dir = Path(log_base_str) / "evaluation"
     setup_logger(log_dir, f"{timestamp}_evaluation.log")
 
     evaluator_llm = OpenRouterLLM(model_name=args.evaluator_model)
@@ -202,10 +213,7 @@ async def main_async():
                     for letter, text in sorted(parsed_choices.items()):
                         choices_list.append(f"({letter}) {text}")
                 format_map["choices_block"] = "\n".join(choices_list)
-                # The MMMU evaluation template references {answer} for the correct letter,
-                # but we also populate correct_answer_letter consistently.
-                if "answer" in question_data:
-                    format_map["correct_answer_letter"] = question_data["answer"]
+                # Ensure the evaluator sees a consistent correct answer letter for MMMU.
 
             # Unpack shuffled choices if they exist, for rich eval prompts
             if "shuffled_choices" in question_data and isinstance(
@@ -214,7 +222,12 @@ async def main_async():
                 for key, value in question_data["shuffled_choices"].items():
                     format_map[f"choice_{key}"] = value
             format_map["correct_answer"] = correct_answer
-            format_map["correct_answer_letter"] = correct_answer
+            if "correct_answer_letter" in question_data:
+                format_map["correct_answer_letter"] = question_data[
+                    "correct_answer_letter"
+                ]
+            elif benchmark.name.startswith("mmmu") and "answer" in question_data:
+                format_map["correct_answer_letter"] = question_data["answer"]
             format_map["model_response"] = gen_data.get("response")
 
             eval_prompt = evaluation_prompt_template.format_map(format_map)
