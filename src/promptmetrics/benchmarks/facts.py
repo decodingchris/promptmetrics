@@ -1,3 +1,5 @@
+"""FACTS Grounding benchmark integration."""
+
 import hashlib
 import logging
 from typing import Any, Dict, List, Literal, Type
@@ -11,12 +13,16 @@ logger = logging.getLogger(__name__)
 
 
 class OfficialFACTSEvaluation(BaseModel):
+    """Structured evaluation verdict for FACTS Grounding."""
+
     reasoning: str
     correct: Literal["yes", "no"] | None = None
     confidence: int = Field(ge=0, le=100, default=100)
 
 
 class FACTSBenchmark(BaseBenchmark):
+    """Integration for google/FACTS-grounding-public (examples/public split)."""
+
     def __init__(self):
         self._name = "facts"
         self.dataset_name = "google/FACTS-grounding-public"
@@ -48,6 +54,11 @@ class FACTSBenchmark(BaseBenchmark):
         return False
 
     def get_size(self) -> int:
+        """Return the total number of samples in the configured split.
+
+        Uses a fast metadata lookup when available, falling back to a full load
+        when metadata is unavailable or the Hub is unreachable.
+        """
         try:
             infos = get_dataset_infos(self.dataset_name)
             return infos[self.dataset_config].splits[self.dataset_split].num_examples
@@ -64,6 +75,12 @@ class FACTSBenchmark(BaseBenchmark):
         max_samples: int | None = None,
         ids_to_load: List[str] | None = None,
     ) -> List[Dict[str, Any]]:
+        """Load and adapt FACTS samples.
+
+        Adds:
+          - id: stable sha1 of user_request
+        Respects ids_to_load over max_samples.
+        """
         dataset = load_dataset(
             self.dataset_name,
             name=self.dataset_config,
@@ -95,6 +112,11 @@ class FACTSBenchmark(BaseBenchmark):
     def format_prompt_messages(
         self, question: Dict[str, Any], prompt_template: str
     ) -> List[Dict[str, MessageContentType]]:
+        """Render a FACTS sample into chat messages with system/user roles.
+
+        The template can contain placeholders for: system_instruction, user_request,
+        and context_document. Supports optional ---[SYSTEM]--- and ---[USER]--- sections.
+        """
         format_dict = {
             "system_instruction": question["system_instruction"],
             "user_request": question["user_request"],

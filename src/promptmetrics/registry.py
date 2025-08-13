@@ -1,3 +1,5 @@
+"""Benchmark registry and factory."""
+
 import logging
 from datasets import get_dataset_infos
 
@@ -14,6 +16,7 @@ _MMMU_CONFIGS = None
 
 
 def get_mmmu_configs():
+    """Return mapping of lowercased config name -> exact case Hub name (cached)."""
     global _MMMU_CONFIGS
     if _MMMU_CONFIGS is None:
         try:
@@ -35,6 +38,7 @@ BENCHMARK_REGISTRY: dict[str, type[BaseBenchmark]] = {
 
 
 def get_benchmark_instance(name: str) -> BaseBenchmark:
+    """Construct a benchmark by canonical name (or mmmu_<subject>)."""
     benchmark_name = name.lower()
 
     if benchmark_name.startswith("mmmu_"):

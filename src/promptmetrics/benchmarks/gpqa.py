@@ -1,3 +1,5 @@
+"""GPQA Diamond benchmark integration."""
+
 import hashlib
 import logging
 import random
@@ -12,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class OfficialGPQAEvaluation(BaseModel):
-    """Pydantic model for the structured output of the GPQA evaluation prompt."""
+    """Structured evaluation verdict for GPQA (multiple choice)."""
 
     extracted_answer_choice: Literal["A", "B", "C", "D"] | None = None
     reasoning: str
@@ -43,13 +45,12 @@ class GPQADiamondBenchmark(BaseBenchmark):
 
     @property
     def official_evaluation_prompt_name(self) -> str | None:
-        # Per our discussion, there is no official evaluation prompt from the authors.
+        # Authors do not provide an official evaluation prompt.
         return None
 
     @property
     def official_evaluation_model(self) -> Type[BaseModel] | None:
-        # We define a model to signal that this benchmark supports a specific
-        # structured evaluation format, which triggers advanced metrics.
+        # Indicates this benchmark supports structured grading and advanced metrics.
         return OfficialGPQAEvaluation
 
     @property
@@ -58,11 +59,9 @@ class GPQADiamondBenchmark(BaseBenchmark):
 
     def get_size(self) -> int:
         """
-        Gets the total number of samples in the dataset split.
+        Return the total number of samples in the dataset split.
 
-        NOTE: For this dataset, the fast metadata lookup via get_dataset_infos
-        does not provide the number of examples, so we must load the dataset
-        to determine its size.
+        A fast metadata lookup is not available; we load and count.
         """
         return len(self.load_data())
 
@@ -71,6 +70,13 @@ class GPQADiamondBenchmark(BaseBenchmark):
         max_samples: int | None = None,
         ids_to_load: List[str] | None = None,
     ) -> List[Dict[str, Any]]:
+        """Load and adapt GPQA samples with deterministic choice shuffling.
+
+        Adds:
+          - id: stable sha1 of the question text
+          - shuffled_choices: dict mapping A-D to options (shuffled deterministically)
+          - correct_answer_letter: A/B/C/D pointing to the correct option in shuffled set
+        """
         dataset = load_dataset(
             self.dataset_name,
             name=self.dataset_config,
@@ -119,6 +125,7 @@ class GPQADiamondBenchmark(BaseBenchmark):
     def format_prompt_messages(
         self, question: Dict[str, Any], prompt_template: str
     ) -> List[Dict[str, MessageContentType]]:
+        """Render a GPQA sample into chat messages using the given template."""
         # Flatten choices for easy formatting in the prompt template
         format_dict = {
             "question": question["Question"],

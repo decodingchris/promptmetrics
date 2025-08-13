@@ -1,3 +1,5 @@
+"""Generate model responses for a benchmark using a specified prompt."""
+
 import argparse
 import asyncio
 import datetime
@@ -18,11 +20,10 @@ def adapt_messages_for_text_only(
     messages: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     """
-    Converts multi-modal messages to a text-only format for non-vision models.
+    Convert multi-modal messages to a text-only format for non-vision models.
 
-    This function processes a list of messages, finds any with multi-part content
-    (like text and images), and collapses them into a single text string. It also
-    appends a clear note indicating that an image was omitted.
+    Finds messages with multi-part content (text + images) and collapses them
+    into a single text string, appending a clear note when images were omitted.
     """
     text_only_messages = []
     for msg in messages:
@@ -44,6 +45,7 @@ def adapt_messages_for_text_only(
 
 
 async def main_async():
+    """Async entrypoint for pm-generate CLI."""
     parser = argparse.ArgumentParser(
         description="Generate model responses for an evaluation."
     )

@@ -1,3 +1,5 @@
+"""AIME 2025 benchmark integration."""
+
 import logging
 from typing import Any, Dict, List, Literal, Type
 
@@ -10,7 +12,10 @@ logger = logging.getLogger(__name__)
 
 
 class OfficialAIMEEvaluation(BaseModel):
-    """Pydantic model for the structured output of the AIME evaluation prompt."""
+    """Structured evaluation verdict for AIME.
+
+    Fields mirror the expected, constrained output of the evaluation prompt.
+    """
 
     extracted_final_answer: str | None = None
     reasoning: str
@@ -55,10 +60,9 @@ class AIMEBenchmark(BaseBenchmark):
 
     def get_size(self) -> int:
         """
-        Gets the total number of samples by loading the dataset.
+        Return total number of samples.
 
-        NOTE: This dataset is very small (30 rows), so loading it directly to
-        get the size is efficient and reliable.
+        This dataset is small (30 rows), so loading and counting is inexpensive.
         """
         return len(self.load_data())
 
@@ -67,6 +71,14 @@ class AIMEBenchmark(BaseBenchmark):
         max_samples: int | None = None,
         ids_to_load: List[str] | None = None,
     ) -> List[Dict[str, Any]]:
+        """Load and adapt AIME samples.
+
+        Adds:
+          - question: copied from 'problem'
+          - id: stringified original 'id'
+
+        Respects ids_to_load over max_samples.
+        """
         dataset = load_dataset(
             self.dataset_name,
             name=self.dataset_config,
@@ -79,9 +91,9 @@ class AIMEBenchmark(BaseBenchmark):
             example["str_id"] = str(example["id"])
             return example
 
-        # Apply the map, creating 'question' and 'str_id', and remove the old columns.
+        # Create 'question' and 'str_id', and drop 'id'/'problem' to avoid confusion.
         dataset = dataset.map(adapt_sample, remove_columns=["id", "problem"])
-        # Rename the new string ID column to 'id' for consistency with the framework.
+        # Standardize ID column name.
         dataset = dataset.rename_column("str_id", "id")
 
         if ids_to_load:
@@ -89,7 +101,7 @@ class AIMEBenchmark(BaseBenchmark):
                 "Optimized load: Loading %d specific samples from the benchmark.",
                 len(ids_to_load),
             )
-            # This block now works correctly as dataset['id'] refers to a true string column.
+            # dataset['id'] is the string ID column created above.
             id_to_index = {id_val: i for i, id_val in enumerate(dataset["id"])}
             indices_to_load = [
                 id_to_index[id_val] for id_val in ids_to_load if id_val in id_to_index
@@ -104,6 +116,11 @@ class AIMEBenchmark(BaseBenchmark):
     def format_prompt_messages(
         self, question: Dict[str, Any], prompt_template: str
     ) -> List[Dict[str, MessageContentType]]:
+        """Render a sample into chat messages using the given template.
+
+        Supports optional ---[SYSTEM]--- and ---[USER]--- sections.
+        If no user section is present, an empty user message is still produced.
+        """
         messages: List[Dict[str, Any]] = []
         system_content = None
         user_template = prompt_template

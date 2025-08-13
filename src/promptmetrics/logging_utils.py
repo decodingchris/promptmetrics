@@ -1,3 +1,5 @@
+"""Logging helpers for PromptMetrics."""
+
 import logging
 import sys
 from pathlib import Path
@@ -5,7 +7,11 @@ from typing import List
 
 
 def setup_logger(log_dir: Path, filename: str):
-    """Configures a logger with detailed file output and clean console output."""
+    """Configure the 'promptmetrics' logger with file + console handlers.
+
+    - File handler (INFO): detailed logs for post-mortem analysis.
+    - Console handler (WARNING): concise feedback for CLI users.
+    """
     log_dir.mkdir(parents=True, exist_ok=True)
     log_filepath = log_dir / filename
 

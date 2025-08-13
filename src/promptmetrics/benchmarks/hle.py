@@ -1,3 +1,5 @@
+"""Humanity's Last Exam (HLE) benchmark integration."""
+
 import os
 import logging
 from datasets import load_dataset, get_dataset_infos
@@ -14,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class OfficialHLEEvaluation(BaseModel):
-    """Pydantic model for the structured output of the official HLE evaluation prompt."""
+    """Structured evaluation verdict for the official HLE evaluation prompt."""
 
     extracted_final_answer: str | None = None
     reasoning: str
@@ -56,7 +58,11 @@ class HLEBenchmark(BaseBenchmark):
         return True
 
     def get_size(self) -> int:
-        """Efficiently gets the total number of samples in the dataset split."""
+        """Return total number of samples in the configured split.
+
+        Uses HF metadata when possible and falls back to a full load (slower) if
+        the Hub requires auth or is unreachable.
+        """
         hf_token = os.getenv("HF_TOKEN")
         try:
             infos = get_dataset_infos(self.dataset_name, token=hf_token)
@@ -76,6 +82,7 @@ class HLEBenchmark(BaseBenchmark):
         max_samples: int | None = None,
         ids_to_load: List[str] | None = None,
     ) -> List[Dict[str, Any]]:
+        """Load HLE samples. Warns if HF_TOKEN is not set for gated datasets."""
         hf_token = os.getenv("HF_TOKEN")
         if not hf_token:
             logger.warning("HF_TOKEN not set. This may fail for gated datasets.")
@@ -106,6 +113,12 @@ class HLEBenchmark(BaseBenchmark):
     def format_prompt_messages(
         self, question: Dict[str, Any], prompt_template: str
     ) -> List[Dict[str, MessageContentType]]:
+        """Render an HLE sample into multimodal chat messages.
+
+        If the sample includes a PIL.Image or image URL, it is appended as an
+        image_url part after the text. If no ---[USER]--- section exists in the
+        template, an empty user text part is still produced.
+        """
         messages: List[Dict[str, Any]] = []
         system_content = None
         user_template = prompt_template
@@ -131,7 +144,7 @@ class HLEBenchmark(BaseBenchmark):
             {"type": "text", "text": formatted_user_text}
         ]
 
-        # Accept either a URL string (current behavior) or a PIL.Image (robustness)
+        # Accept either a URL string or a PIL.Image for robustness.
         image_obj = question.get("image")
         if isinstance(image_obj, Image.Image):
             image_data_url = pil_to_base64_url(image_obj)

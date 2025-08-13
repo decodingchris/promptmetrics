@@ -1,4 +1,4 @@
-# src/promptmetrics/utils.py
+"""Utility functions for image encoding and prompt loading."""
 
 from pathlib import Path
 from typing import Tuple
@@ -8,7 +8,15 @@ from PIL import Image
 
 
 def pil_to_base64_url(img: Image.Image, format: str = "PNG") -> str:
-    """Converts a Pillow image to a base64 data URL."""
+    """Convert a Pillow image to a base64 data URL (data:image/<fmt>;base64,...).
+
+    Args:
+        img: PIL Image to encode.
+        format: Image format for encoding (e.g., 'PNG', 'JPEG').
+
+    Returns:
+        A data URL string suitable for image_url payloads.
+    """
     buffered = BytesIO()
     img.save(buffered, format=format)
     img_str = base64.b64encode(buffered.getvalue()).decode()
@@ -19,18 +27,19 @@ def load_prompt_template(
     prompt_source: str, benchmark_name: str, prompt_type: str
 ) -> Tuple[str, Path, str]:
     """
-    Loads a prompt template from a file, a public, or a private directory.
+    Load a prompt template from one of: external file path, prompts/private, prompts/public.
 
     Args:
-        prompt_source: Name of the prompt file, path to a custom prompt file.
-        benchmark_name: The name of the benchmark to scope the search.
-        prompt_type: The type of prompt, either 'generation' or 'evaluation'.
+        prompt_source: File stem (without .txt) or full file path.
+        benchmark_name: Benchmark name to scope the search (handles mmmu_* variants).
+        prompt_type: 'generation' or 'evaluation'.
 
     Returns:
-        A tuple containing the prompt content, its path, and its source type.
+        (prompt_content, resolved_path, source_type) where source_type is
+        one of {'private','public','external'}.
 
     Raises:
-        FileNotFoundError: If the prompt cannot be found in any search location.
+        FileNotFoundError: If no prompt is found in any search location.
     """
     if Path(prompt_source).is_file():
         path = Path(prompt_source)
